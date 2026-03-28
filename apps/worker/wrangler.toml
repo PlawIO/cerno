@@ -1,0 +1,11 @@
+name = "cerno-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "CERNO_KV"
+id = "placeholder-kv-id"
+preview_id = "placeholder-preview-id"
+
+[vars]
+CERNO_SECRET = "change-me-in-production"
