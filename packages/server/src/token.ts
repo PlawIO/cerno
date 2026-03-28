@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose'
-import type { TokenPayload, VerifyTokenResult } from './types.js'
+import type { CaptchaStore, TokenPayload, VerifyTokenResult } from './types.js'
 
 type TokenInput = Omit<TokenPayload, 'jti' | 'iat' | 'exp'>
 
@@ -37,7 +37,7 @@ export async function generateToken(
  */
 export async function verifyToken(
   token: string,
-  options: { secret: string; sessionId: string; maxAge?: number },
+  options: { secret: string; sessionId: string; store?: CaptchaStore; tokenTtlMs?: number },
 ): Promise<VerifyTokenResult> {
   const secretKey = new TextEncoder().encode(options.secret)
 
@@ -50,6 +50,17 @@ export async function verifyToken(
 
     if (claims.session_id !== options.sessionId) {
       return { valid: false, score: 0, error: 'session_mismatch' }
+    }
+
+    // Single-use enforcement: check if token has already been consumed
+    if (options.store && claims.jti) {
+      const consumed = await options.store.isTokenConsumed(claims.jti)
+      if (consumed) {
+        return { valid: false, score: 0, error: 'token_already_consumed' }
+      }
+      // Mark consumed with TTL matching token expiry
+      const ttl = options.tokenTtlMs ?? 60_000
+      await options.store.markTokenConsumed(claims.jti, ttl)
     }
 
     return { valid: true, score: claims.score }

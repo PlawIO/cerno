@@ -69,6 +69,9 @@ export interface BehavioralFeatures {
 export interface Challenge {
   id: string
   maze_seed: number
+  maze_width: number
+  maze_height: number
+  maze_difficulty: number
   pow_challenge: string
   pow_difficulty: number
   site_key: string

@@ -13,14 +13,14 @@ import { generateToken } from './token.js'
 
 const DEFAULTS = {
   mazeDifficulty: 0.3,
-  mazeWidth: 10,
-  mazeHeight: 10,
+  mazeWidth: 8,
+  mazeHeight: 8,
   powDifficulty: 18,
   challengeTtlMs: 120_000,
   tokenTtlMs: 60_000,
   scoreThreshold: 0.5,
   calibrationScoreThreshold: 0.3,
-  maxAttempts: 5,
+  maxAttempts: 3,
   rateLimitWindowMs: 300_000,
 } as const
 
@@ -45,12 +45,18 @@ export async function createChallenge(
   const mazeSeed = globalThis.crypto.getRandomValues(new Uint32Array(1))[0]
   const powChallenge = randomHex(16) // 32 hex chars
   const powDifficulty = config.powDifficulty ?? DEFAULTS.powDifficulty
+  const mazeWidth = config.mazeWidth ?? DEFAULTS.mazeWidth
+  const mazeHeight = config.mazeHeight ?? DEFAULTS.mazeHeight
+  const mazeDifficulty = config.mazeDifficulty ?? DEFAULTS.mazeDifficulty
   const ttl = config.challengeTtlMs ?? DEFAULTS.challengeTtlMs
   const now = Date.now()
 
   const challenge: Challenge = {
     id,
     maze_seed: mazeSeed,
+    maze_width: mazeWidth,
+    maze_height: mazeHeight,
+    maze_difficulty: mazeDifficulty,
     pow_challenge: powChallenge,
     pow_difficulty: powDifficulty,
     site_key: siteKey,
@@ -76,6 +82,15 @@ export async function validateSubmission(
   const threshold = config.scoreThreshold ??
     (config.calibrationMode ? DEFAULTS.calibrationScoreThreshold : DEFAULTS.scoreThreshold)
 
+  // 0. Input validation: bound events array to prevent DoS
+  if (!Array.isArray(request.events) || request.events.length > 50_000) {
+    return {
+      success: false,
+      score: 0,
+      error_code: ErrorCode.INVALID_REQUEST,
+    }
+  }
+
   // 1. Rate limit check
   const rateKey = `rate:${request.session_id}`
   const attempts = await store.incrementRate(rateKey, rateLimitWindow)
@@ -100,6 +115,15 @@ export async function validateSubmission(
   // Delete challenge immediately to prevent replay (single-use)
   await store.deleteChallenge(request.challenge_id)
 
+  // 2b. Verify site_key matches (prevents using challenge from site A on site B)
+  if (challenge.site_key !== request.site_key) {
+    return {
+      success: false,
+      score: 0,
+      error_code: ErrorCode.CHALLENGE_NOT_FOUND,
+    }
+  }
+
   // 3. Check expiry
   if (Date.now() > challenge.expires_at) {
     return {
@@ -123,17 +147,13 @@ export async function validateSubmission(
     }
   }
 
-  // 5. Verify maze path
-  const mazeWidth = config.mazeWidth ?? DEFAULTS.mazeWidth
-  const mazeHeight = config.mazeHeight ?? DEFAULTS.mazeHeight
-  const mazeDifficulty = config.mazeDifficulty ?? DEFAULTS.mazeDifficulty
-
+  // 5. Verify maze path (dimensions come from challenge, not config, ensuring client/server match)
   const mazeResult = validateMazePath(
     request.maze_seed,
     request.events,
-    mazeWidth,
-    mazeHeight,
-    mazeDifficulty,
+    challenge.maze_width,
+    challenge.maze_height,
+    challenge.maze_difficulty,
   )
   if (!mazeResult.valid) {
     return {
@@ -150,7 +170,7 @@ export async function validateSubmission(
   if (score < threshold) {
     return {
       success: false,
-      score,
+      score: 0, // Don't leak actual score to prevent gradient attacks
       error_code: ErrorCode.BEHAVIORAL_REJECTED,
     }
   }

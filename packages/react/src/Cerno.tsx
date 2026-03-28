@@ -45,12 +45,15 @@ function arrayBufferToHex(buffer: ArrayBuffer): string {
 async function solvePowMainThread(
   challenge: string,
   difficulty: number,
+  signal?: { cancelled: boolean },
 ): Promise<PowResult> {
   const encoder = new TextEncoder()
   let nonce = 0
   const BATCH = 500
-  while (true) {
-    for (let i = 0; i < BATCH; i++) {
+  const MAX_NONCE = 10_000_000 // Safety bound: ~10M iterations max
+  while (nonce < MAX_NONCE) {
+    if (signal?.cancelled) throw new Error('PoW cancelled')
+    for (let i = 0; i < BATCH && nonce < MAX_NONCE; i++) {
       const data = encoder.encode(challenge + nonce)
       const hash = await crypto.subtle.digest('SHA-256', data)
       if (hasLeadingZeroBits(hash, difficulty)) {
@@ -60,13 +63,14 @@ async function solvePowMainThread(
     }
     await new Promise<void>((r) => setTimeout(r, 0))
   }
+  throw new Error('PoW exceeded max iterations')
 }
 
 function startPow(
   challenge: string,
   difficulty: number,
 ): { promise: Promise<PowResult>; cancel: () => void } {
-  let cancelled = false
+  const signal = { cancelled: false }
   let worker: Worker | null = null
 
   const promise = new Promise<PowResult>((resolve, reject) => {
@@ -114,7 +118,7 @@ ctx.addEventListener('message', (e) => { solve(e.data.challenge, e.data.difficul
 
       worker.onmessage = (e: MessageEvent<PowResult>) => {
         URL.revokeObjectURL(url)
-        if (!cancelled) resolve(e.data)
+        if (!signal.cancelled) resolve(e.data)
       }
 
       worker.onerror = () => {
@@ -122,20 +126,20 @@ ctx.addEventListener('message', (e) => { solve(e.data.challenge, e.data.difficul
         worker?.terminate()
         worker = null
         // Fall back to main thread
-        if (!cancelled) solvePowMainThread(challenge, difficulty).then(resolve, reject)
+        if (!signal.cancelled) solvePowMainThread(challenge, difficulty, signal).then(resolve, reject)
       }
 
       worker.postMessage({ challenge, difficulty })
     } catch {
       // Workers not available, fall back
-      if (!cancelled) solvePowMainThread(challenge, difficulty).then(resolve, reject)
+      if (!signal.cancelled) solvePowMainThread(challenge, difficulty, signal).then(resolve, reject)
     }
   })
 
   return {
     promise,
     cancel() {
-      cancelled = true
+      signal.cancelled = true
       worker?.terminate()
     },
   }
@@ -225,12 +229,11 @@ export function Cerno({
 
       setChallenge(ch)
 
-      // Generate maze from seed
-      const difficulty = ch.pow_difficulty > 0 ? Math.min(ch.pow_difficulty / 24, 1) : 0.5
+      // Generate maze from seed (dimensions and difficulty come from server challenge)
       const m = generateMaze({
-        width: size === 'compact' ? 6 : 8,
-        height: size === 'compact' ? 6 : 8,
-        difficulty,
+        width: ch.maze_width,
+        height: ch.maze_height,
+        difficulty: ch.maze_difficulty,
         seed: ch.maze_seed,
       })
       setMaze(m)
@@ -241,7 +244,7 @@ export function Cerno({
       setState('ready')
 
       // Set expiry timer
-      const ttl = ch.expires_at * 1000 - Date.now()
+      const ttl = ch.expires_at - Date.now()
       const timeoutMs = ttl > 0 ? Math.min(ttl, CHALLENGE_TTL_MS) : CHALLENGE_TTL_MS
 
       expiryTimerRef.current = setTimeout(() => {

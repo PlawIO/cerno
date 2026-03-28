@@ -64,6 +64,14 @@ describe('scoreBehavior', () => {
     expect(score).toBeLessThanOrEqual(1)
   })
 
+  it('returns 0 for NaN features (prevents NaN bypass)', () => {
+    const score = scoreBehavior(humanFeatures({
+      velocity_std: NaN,
+      jerk_std: NaN,
+    }))
+    expect(score).toBe(0)
+  })
+
   it('returns 0 for completely empty features', () => {
     const score = scoreBehavior(humanFeatures({
       velocity_std: 0,

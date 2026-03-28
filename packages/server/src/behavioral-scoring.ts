@@ -64,6 +64,9 @@ export function scoreBehavior(features: BehavioralFeatures): number {
     score *= durationRatio
   }
 
+  // NaN guard: if any feature produced NaN, reject (score 0)
+  if (Number.isNaN(score)) return 0
+
   // Clamp to [0, 1]
   return Math.max(0, Math.min(1, score))
 }
