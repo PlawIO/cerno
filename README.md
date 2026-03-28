@@ -105,4 +105,6 @@ bun test
 
 ## License
 
-MIT
+Apache 2.0 — see [LICENSE](./LICENSE).
+
+Copyright 2026 PlawIO, Inc.
