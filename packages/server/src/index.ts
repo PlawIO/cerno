@@ -21,6 +21,6 @@ export type {
   MazeConfig,
   Maze,
   Point,
-} from '@agentcaptcha/core'
+} from '@cerno/core'
 
-export { ErrorCode, CaptchaError } from '@agentcaptcha/core'
+export { ErrorCode, CaptchaError } from '@cerno/core'

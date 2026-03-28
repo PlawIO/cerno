@@ -1,5 +1,5 @@
-import type { Maze, RawEvent } from '@agentcaptcha/core'
-import { Wall } from '@agentcaptcha/core'
+import type { Maze, RawEvent } from '@cerno/core'
+import { Wall } from '@cerno/core'
 
 export interface KeyboardCollector {
   start(): void

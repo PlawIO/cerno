@@ -1,5 +1,5 @@
 {
-  "name": "@agentcaptcha/server",
+  "name": "@cerno/server",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,7 +17,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@agentcaptcha/core": "workspace:*",
+    "@cerno/core": "workspace:*",
     "jose": "^6.0.0"
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Maze, RawEvent } from '@agentcaptcha/core'
-import { RENDERING, Wall } from '@agentcaptcha/core'
+import type { Maze, RawEvent } from '@cerno/core'
+import { RENDERING, Wall } from '@cerno/core'
 import { createMouseCollector, type MouseCollector } from './mouse-collector.js'
 import { createKeyboardCollector, type KeyboardCollector } from './keyboard-collector.js'
 

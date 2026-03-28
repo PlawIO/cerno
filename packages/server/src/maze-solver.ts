@@ -1,5 +1,5 @@
-import { generateMaze, validatePath } from '@agentcaptcha/core'
-import type { Maze, Point, RawEvent } from '@agentcaptcha/core'
+import { generateMaze, validatePath } from '@cerno/core'
+import type { Maze, Point, RawEvent } from '@cerno/core'
 
 export interface MazeValidationResult {
   valid: boolean

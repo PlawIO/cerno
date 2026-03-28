@@ -1,7 +1,7 @@
 {
-  "name": "agentcaptcha",
+  "name": "cerno",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "build": "bun run --filter '*' build",
     "test": "vitest run",

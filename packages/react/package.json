@@ -1,5 +1,5 @@
 {
-  "name": "@agentcaptcha/react",
+  "name": "@cerno/react",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,7 +17,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@agentcaptcha/core": "workspace:*"
+    "@cerno/core": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

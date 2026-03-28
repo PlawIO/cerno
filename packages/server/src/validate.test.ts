@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { type RawEvent, generateMaze } from '@agentcaptcha/core'
+import { type RawEvent, generateMaze } from '@cerno/core'
 import { createChallenge, validateSubmission } from './validate.js'
 import { MemoryStore } from './store.js'
 import type { ServerConfig } from './types.js'

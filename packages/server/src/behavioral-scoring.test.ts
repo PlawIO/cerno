@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BehavioralFeatures } from '@agentcaptcha/core'
+import type { BehavioralFeatures } from '@cerno/core'
 import { scoreBehavior } from './behavioral-scoring.js'
 
 function humanFeatures(overrides: Partial<BehavioralFeatures> = {}): BehavioralFeatures {

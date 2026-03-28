@@ -5,8 +5,8 @@ import type {
   RawEvent,
   ValidationRequest,
   ValidationResult,
-} from '@agentcaptcha/core'
-import { extractFeatures, generateMaze } from '@agentcaptcha/core'
+} from '@cerno/core'
+import { extractFeatures, generateMaze } from '@cerno/core'
 import { MazeCanvas } from './MazeCanvas.js'
 import { generateEphemeralKeyPair } from './crypto-binding.js'
 
@@ -143,7 +143,7 @@ ctx.addEventListener('message', (e) => { solve(e.data.challenge, e.data.difficul
 
 // ── Types ──
 
-export interface AgentCaptchaProps {
+export interface CernoProps {
   siteKey: string
   sessionId: string
   onVerify: (token: string) => void
@@ -168,7 +168,7 @@ const CHALLENGE_TTL_MS = 2 * 60 * 1000
 
 // ── Component ──
 
-export function AgentCaptcha({
+export function Cerno({
   siteKey,
   sessionId,
   onVerify,
@@ -177,7 +177,7 @@ export function AgentCaptcha({
   theme = 'light',
   size = 'normal',
   apiUrl = '/api/captcha',
-}: AgentCaptchaProps) {
+}: CernoProps) {
   const [state, setState] = useState<CaptchaState>('loading')
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [maze, setMaze] = useState<Maze | null>(null)
@@ -461,7 +461,7 @@ export function AgentCaptcha({
           <rect x="1" y="1" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.5" />
           <path d="M4 8h8M8 4v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        AgentCaptcha
+        Cerno
       </div>
     </div>
   )
@@ -476,9 +476,9 @@ function Spinner({ isDark }: { isDark: boolean }) {
       height="16"
       viewBox="0 0 16 16"
       fill="none"
-      style={{ animation: 'agentcaptcha-spin 0.8s linear infinite' }}
+      style={{ animation: 'cerno-spin 0.8s linear infinite' }}
     >
-      <style>{`@keyframes agentcaptcha-spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes cerno-spin { to { transform: rotate(360deg); } }`}</style>
       <circle cx="8" cy="8" r="6" stroke={color} strokeWidth="2" strokeDasharray="28 10" strokeLinecap="round" />
     </svg>
   )

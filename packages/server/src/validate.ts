@@ -4,7 +4,7 @@ import {
   type ValidationResult,
   ErrorCode,
   extractFeatures,
-} from '@agentcaptcha/core'
+} from '@cerno/core'
 import type { ServerConfig } from './types.js'
 import { verifyPow } from './pow-verify.js'
 import { validateMazePath } from './maze-solver.js'

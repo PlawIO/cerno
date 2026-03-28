@@ -1,4 +1,4 @@
-import type { BehavioralFeatures } from '@agentcaptcha/core'
+import type { BehavioralFeatures } from '@cerno/core'
 
 interface FeatureBaseline {
   mean: number

@@ -1,4 +1,4 @@
-import type { Challenge } from '@agentcaptcha/core'
+import type { Challenge } from '@cerno/core'
 
 export interface CaptchaStore {
   setChallenge(id: string, data: Challenge, ttlMs: number): Promise<void>

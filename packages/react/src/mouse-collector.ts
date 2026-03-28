@@ -1,4 +1,4 @@
-import type { RawEvent } from '@agentcaptcha/core'
+import type { RawEvent } from '@cerno/core'
 
 export interface MouseCollector {
   start(): void
