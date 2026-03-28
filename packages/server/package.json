@@ -1,0 +1,23 @@
+{
+  "name": "@cerno/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@cerno/core": "workspace:*",
+    "jose": "^6.0.0"
+  }
+}

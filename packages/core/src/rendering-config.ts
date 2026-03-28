@@ -1,0 +1,15 @@
+export const RENDERING = {
+  CELL_SIZE: 40,
+  WALL_THICKNESS: 2,
+  MARGIN: 20,
+  START_COLOR: '#22c55e',
+  EXIT_COLOR: '#ef4444',
+  PATH_COLOR: '#3b82f6',
+  WALL_COLOR: '#1e293b',
+  BG_COLOR: '#f8fafc',
+  DARK_BG_COLOR: '#0f172a',
+  DARK_WALL_COLOR: '#cbd5e1',
+  MARKER_RADIUS: 12,
+  PATH_WIDTH: 3,
+  CURSOR_COLOR: '#8b5cf6',
+} as const

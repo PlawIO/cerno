@@ -1,0 +1,16 @@
+{
+  "name": "cerno",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "test": "vitest run",
+    "dev": "bun run --filter '*' dev",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0",
+    "tsup": "^8.4.0"
+  }
+}
