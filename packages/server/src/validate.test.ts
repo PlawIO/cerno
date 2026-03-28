@@ -94,14 +94,17 @@ describe('validate pipeline', () => {
     expect(challenge.pow_difficulty).toBe(4)
     expect(challenge.site_key).toBe('test-site')
     expect(challenge.expires_at).toBeGreaterThan(challenge.created_at)
+    expect(challenge.maze_width).toBe(8)
+    expect(challenge.maze_height).toBe(8)
+    expect(challenge.maze_difficulty).toBe(0.3)
   })
 
   it('happy path: valid submission returns success + token', async () => {
     const challenge = await createChallenge(config, 'test-site')
     const maze = generateMaze({
-      width: config.mazeWidth!,
-      height: config.mazeHeight!,
-      difficulty: config.mazeDifficulty!,
+      width: challenge.maze_width,
+      height: challenge.maze_height,
+      difficulty: challenge.maze_difficulty,
       seed: challenge.maze_seed,
     })
     const events = makeHumanEvents(maze)
@@ -141,9 +144,9 @@ describe('validate pipeline', () => {
   it('rejects replay (challenge used twice)', async () => {
     const challenge = await createChallenge(config, 'test-site')
     const maze = generateMaze({
-      width: config.mazeWidth!,
-      height: config.mazeHeight!,
-      difficulty: config.mazeDifficulty!,
+      width: challenge.maze_width,
+      height: challenge.maze_height,
+      difficulty: challenge.maze_difficulty,
       seed: challenge.maze_seed,
     })
     const events = makeHumanEvents(maze)

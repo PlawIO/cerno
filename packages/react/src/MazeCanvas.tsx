@@ -197,8 +197,8 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
         let cy = maze.start.y
         for (const ev of kbEvents) {
           if (ev.type === 'keydown') {
-            const nx = Math.round(ev.x * maze.width - 0.5)
-            const ny = Math.round(ev.y * maze.height - 0.5)
+            const nx = Math.min(Math.floor(ev.x * maze.width), maze.width - 1)
+            const ny = Math.min(Math.floor(ev.y * maze.height), maze.height - 1)
             if (nx !== cx || ny !== cy) {
               cellPath.push({ x: nx, y: ny })
               cx = nx
@@ -435,8 +435,6 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
           touchAction: 'none',
         }}
         tabIndex={0}
-        role="img"
-        aria-label="CAPTCHA maze puzzle"
       />
     </div>
   )

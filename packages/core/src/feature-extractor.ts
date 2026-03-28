@@ -5,12 +5,13 @@ function resampleTo60Hz(events: RawEvent[]): RawEvent[] {
   if (events.length < 2) return events
 
   const INTERVAL = 1000 / 60 // ~16.67ms
+  const MAX_SAMPLES = 10_000 // Cap at ~2.8 minutes of 60Hz data
   const resampled: RawEvent[] = []
   const start = events[0].t
   const end = events[events.length - 1].t
   let eventIdx = 0
 
-  for (let t = start; t <= end; t += INTERVAL) {
+  for (let t = start; t <= end && resampled.length < MAX_SAMPLES; t += INTERVAL) {
     // Find surrounding events for interpolation
     while (eventIdx < events.length - 1 && events[eventIdx + 1].t < t) {
       eventIdx++
@@ -47,8 +48,12 @@ function std(values: number[]): number {
 
 function shannonEntropy(values: number[], binCount: number): number {
   if (values.length === 0) return 0
-  const min = Math.min(...values)
-  const max = Math.max(...values)
+  let min = values[0]
+  let max = values[0]
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] < min) min = values[i]
+    if (values[i] > max) max = values[i]
+  }
   const range = max - min
   if (range === 0) return 0
 
