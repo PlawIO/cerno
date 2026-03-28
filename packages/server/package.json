@@ -1,6 +1,15 @@
 {
   "name": "@cerno/server",
   "version": "0.1.0",
+  "description": "Server-side validation pipeline for Cerno CAPTCHA: maze-relative behavioral scoring, PoW verification, JWT tokens, CaptchaStore interface",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PlawIO/cerno.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://cerno.sh",
+  "keywords": ["captcha", "behavioral-biometrics", "server", "validation", "jwt", "anti-bot"],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,6 +18,9 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsup",
