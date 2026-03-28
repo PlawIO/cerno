@@ -4,8 +4,5 @@ compatibility_date = "2025-01-01"
 
 [[kv_namespaces]]
 binding = "CERNO_KV"
-id = "placeholder-kv-id"
-preview_id = "placeholder-preview-id"
-
-[vars]
-CERNO_SECRET = "change-me-in-production"
+id = "d22c19ad9db1485196d79e3cce159e43"
+preview_id = "a27022eb296b4efc81499210ad4df658"
