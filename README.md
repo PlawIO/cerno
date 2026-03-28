@@ -5,7 +5,7 @@
 Maze-trace CAPTCHA with behavioral biometrics. Invisible to humans. Impenetrable to agents.
 
 > Latin: *cerno* — "I distinguish" / "I separate" / "I perceive."
-> Built by [veto.so](https://veto.so). Veto forbids unsafe AI behavior. Cerno distinguishes AI from human.
+> Built by [veto.so](https://veto.so). Veto forbids unwanted AI behavior. Cerno distinguishes AI from human.
 
 ## How it works
 
