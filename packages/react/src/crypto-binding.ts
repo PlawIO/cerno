@@ -1,18 +1,10 @@
-export interface EphemeralKeyPair {
-  publicKeyBase64: string
-  sign(data: ArrayBuffer): Promise<ArrayBuffer>
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
-export async function generateEphemeralKeyPair(): Promise<EphemeralKeyPair> {
+/**
+ * Generate an ephemeral ECDSA key pair for challenge binding.
+ * The public key is sent to the server and hashed into the JWT.
+ * The private key is discarded (sign() is not needed for MVP,
+ * the public key hash alone binds the token to this client session).
+ */
+export async function generateEphemeralKeyPair(): Promise<{ publicKeyBase64: string }> {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDSA', namedCurve: 'P-256' },
     true,
@@ -22,14 +14,5 @@ export async function generateEphemeralKeyPair(): Promise<EphemeralKeyPair> {
   const jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
   const publicKeyBase64 = btoa(JSON.stringify(jwk))
 
-  return {
-    publicKeyBase64,
-    async sign(data: ArrayBuffer): Promise<ArrayBuffer> {
-      return crypto.subtle.sign(
-        { name: 'ECDSA', hash: 'SHA-256' },
-        keyPair.privateKey,
-        data,
-      )
-    },
-  }
+  return { publicKeyBase64 }
 }

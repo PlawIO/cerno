@@ -1,5 +1,5 @@
 import { mulberry32 } from './seeded-prng.js'
-import type { Cell, Maze, MazeConfig, Point } from './types.js'
+import type { Cell, Maze, MazeConfig, MazeProfile, Point } from './types.js'
 import { Wall } from './types.js'
 
 const OPPOSITE: Record<number, number> = {
@@ -122,19 +122,21 @@ export function solveMaze(
   const key = (p: Point) => `${p.x},${p.y}`
 
   const queue: Point[] = [start]
+  let qHead = 0
   visited[start.y][start.x] = true
   parent.set(key(start), null)
 
-  while (queue.length > 0) {
-    const curr = queue.shift()!
+  while (qHead < queue.length) {
+    const curr = queue[qHead++]
     if (curr.x === exit.x && curr.y === exit.y) {
       // Reconstruct path
       const path: Point[] = []
       let node: Point | null = curr
       while (node !== null) {
-        path.unshift({ x: node.x, y: node.y })
+        path.push({ x: node.x, y: node.y })
         node = parent.get(key(node)) ?? null
       }
+      path.reverse()
       return path
     }
 
@@ -155,6 +157,56 @@ export function solveMaze(
 
   // Should never happen for a valid maze
   return [start, exit]
+}
+
+/**
+ * Compute a structural profile of the maze for maze-relative scoring.
+ * Baselines computed from the actual maze topology are strictly more accurate
+ * than hardcoded values from unrelated mouse-movement research.
+ */
+export function computeMazeProfile(maze: Maze): MazeProfile {
+  const solution = maze.solution
+  const solutionLength = solution.length
+
+  // Decision points: solution cells with >2 open passages (forks where you could go wrong)
+  let decisionPointCount = 0
+  for (const cell of solution) {
+    const walls = maze.grid[cell.y][cell.x].walls
+    let open = 0
+    if (!(walls & Wall.N)) open++
+    if (!(walls & Wall.S)) open++
+    if (!(walls & Wall.E)) open++
+    if (!(walls & Wall.W)) open++
+    if (open > 2) decisionPointCount++
+  }
+
+  // Turns: direction changes along the BFS solution
+  let turnCount = 0
+  for (let i = 2; i < solution.length; i++) {
+    const prevDx = solution[i - 1].x - solution[i - 2].x
+    const prevDy = solution[i - 1].y - solution[i - 2].y
+    const currDx = solution[i].x - solution[i - 1].x
+    const currDy = solution[i].y - solution[i - 1].y
+    if (prevDx !== currDx || prevDy !== currDy) turnCount++
+  }
+
+  // Optimal path efficiency in normalized (0-1) coordinates
+  const sNx = (maze.start.x + 0.5) / maze.width
+  const sNy = (maze.start.y + 0.5) / maze.height
+  const eNx = (maze.exit.x + 0.5) / maze.width
+  const eNy = (maze.exit.y + 0.5) / maze.height
+  const euclidean = Math.sqrt((eNx - sNx) ** 2 + (eNy - sNy) ** 2)
+
+  let pathDist = 0
+  for (let i = 1; i < solution.length; i++) {
+    const dx = (solution[i].x + 0.5) / maze.width - (solution[i - 1].x + 0.5) / maze.width
+    const dy = (solution[i].y + 0.5) / maze.height - (solution[i - 1].y + 0.5) / maze.height
+    pathDist += Math.sqrt(dx * dx + dy * dy)
+  }
+
+  const optimalEfficiency = pathDist > 0 ? euclidean / pathDist : 0
+
+  return { solutionLength, decisionPointCount, turnCount, optimalEfficiency }
 }
 
 /**

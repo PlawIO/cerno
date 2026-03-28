@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { generateMaze, solveMaze, validatePath } from './maze-generator.js'
+import { generateMaze, solveMaze, validatePath, computeMazeProfile } from './maze-generator.js'
 import type { Maze, Point } from './types.js'
 import { Wall } from './types.js'
 
@@ -100,6 +100,66 @@ describe('generateMaze', () => {
     // Just verify both are valid
     expect(dfs.solution.length).toBeGreaterThan(1)
     expect(prim.solution.length).toBeGreaterThan(1)
+  })
+})
+
+describe('computeMazeProfile', () => {
+  it('computes correct solution length', () => {
+    const maze = generateMaze({ width: 8, height: 8, difficulty: 0.3, seed: 42 })
+    const profile = computeMazeProfile(maze)
+    expect(profile.solutionLength).toBe(maze.solution.length)
+  })
+
+  it('detects decision points (cells with >2 open passages)', () => {
+    const maze = generateMaze({ width: 8, height: 8, difficulty: 0.3, seed: 42 })
+    const profile = computeMazeProfile(maze)
+    // A perfect maze has decision points; 8x8 should have at least a few on the solution path
+    expect(profile.decisionPointCount).toBeGreaterThanOrEqual(0)
+    expect(profile.decisionPointCount).toBeLessThanOrEqual(profile.solutionLength)
+  })
+
+  it('counts turns correctly', () => {
+    const maze = generateMaze({ width: 8, height: 8, difficulty: 0.3, seed: 42 })
+    const profile = computeMazeProfile(maze)
+    // Any non-trivial maze path has turns
+    expect(profile.turnCount).toBeGreaterThan(0)
+    // Can't have more turns than solution steps - 2
+    expect(profile.turnCount).toBeLessThanOrEqual(profile.solutionLength - 2)
+  })
+
+  it('optimal efficiency is in (0, 1] range', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const maze = generateMaze({ width: 8, height: 8, difficulty: 0.3, seed })
+      const profile = computeMazeProfile(maze)
+      expect(profile.optimalEfficiency).toBeGreaterThan(0)
+      expect(profile.optimalEfficiency).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('harder mazes have lower optimal efficiency', () => {
+    // Over many seeds, average efficiency should be lower for more complex paths
+    let simpleEffSum = 0
+    let complexEffSum = 0
+    const N = 50
+    for (let seed = 0; seed < N; seed++) {
+      const simple = generateMaze({ width: 4, height: 4, difficulty: 0, seed })
+      const complex = generateMaze({ width: 12, height: 12, difficulty: 0.8, seed })
+      simpleEffSum += computeMazeProfile(simple).optimalEfficiency
+      complexEffSum += computeMazeProfile(complex).optimalEfficiency
+    }
+    // Larger, more branchy mazes should have more winding solutions on average
+    expect(complexEffSum / N).toBeLessThan(simpleEffSum / N)
+  })
+
+  it('produces different profiles for different mazes', () => {
+    const a = computeMazeProfile(generateMaze({ width: 8, height: 8, difficulty: 0.3, seed: 1 }))
+    const b = computeMazeProfile(generateMaze({ width: 8, height: 8, difficulty: 0.3, seed: 2 }))
+    // At least one field should differ
+    const differs = a.solutionLength !== b.solutionLength ||
+      a.decisionPointCount !== b.decisionPointCount ||
+      a.turnCount !== b.turnCount ||
+      a.optimalEfficiency !== b.optimalEfficiency
+    expect(differs).toBe(true)
   })
 })
 

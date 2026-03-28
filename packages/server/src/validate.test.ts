@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { type RawEvent, generateMaze } from '@cerno/core'
 import { createChallenge, validateSubmission } from './validate.js'
+import { verifyToken } from './token.js'
 import { MemoryStore } from './store.js'
 import type { ServerConfig } from './types.js'
 
@@ -187,6 +188,87 @@ describe('validate pipeline', () => {
     })
     expect(result.success).toBe(false)
     expect(result.error_code).toBe('invalid_pow')
+  })
+
+  it('end-to-end: validate then verifyToken round-trip', async () => {
+    const challenge = await createChallenge(config, 'test-site')
+    const maze = generateMaze({
+      width: challenge.maze_width,
+      height: challenge.maze_height,
+      difficulty: challenge.maze_difficulty,
+      seed: challenge.maze_seed,
+    })
+    const events = makeHumanEvents(maze)
+    const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
+
+    const result = await validateSubmission(config, {
+      challenge_id: challenge.id,
+      site_key: 'test-site',
+      session_id: 'session-e2e',
+      maze_seed: challenge.maze_seed,
+      events,
+      pow_proof: powProof,
+      public_key: 'test-public-key',
+      timestamp: Date.now(),
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.token).toBeDefined()
+
+    // Verify the token round-trips correctly
+    const verified = await verifyToken(result.token!, {
+      secret: config.secret,
+      sessionId: 'session-e2e',
+      store,
+      tokenTtlMs: 60000,
+    })
+    expect(verified.valid).toBe(true)
+    expect(verified.score).toBeGreaterThan(0)
+
+    // Second use of same token should fail (single-use)
+    const replay = await verifyToken(result.token!, {
+      secret: config.secret,
+      sessionId: 'session-e2e',
+      store,
+      tokenTtlMs: 60000,
+    })
+    expect(replay.valid).toBe(false)
+    expect(replay.error).toBe('token_already_consumed')
+  })
+
+  it('rejects oversized events array', async () => {
+    const challenge = await createChallenge(config, 'test-site')
+    const hugeEvents = new Array(50_001).fill({ t: 0, x: 0, y: 0, type: 'move' })
+
+    const result = await validateSubmission(config, {
+      challenge_id: challenge.id,
+      site_key: 'test-site',
+      session_id: 'session-dos',
+      maze_seed: challenge.maze_seed,
+      events: hugeEvents,
+      pow_proof: { nonce: 0, hash: 'bad' },
+      public_key: 'pk',
+      timestamp: Date.now(),
+    })
+    expect(result.success).toBe(false)
+    expect(result.error_code).toBe('invalid_request')
+  })
+
+  it('rejects site_key mismatch between challenge and request', async () => {
+    const challenge = await createChallenge(config, 'site-alpha')
+
+    const result = await validateSubmission(config, {
+      challenge_id: challenge.id,
+      site_key: 'site-beta', // Different from 'site-alpha'
+      session_id: 'session-mismatch',
+      maze_seed: challenge.maze_seed,
+      events: [],
+      pow_proof: { nonce: 0, hash: 'bad' },
+      public_key: 'pk',
+      timestamp: Date.now(),
+    })
+    expect(result.success).toBe(false)
+    expect(result.error_code).toBe('challenge_not_found')
   })
 
   it('rate limits after max attempts', async () => {

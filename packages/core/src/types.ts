@@ -64,6 +64,19 @@ export interface BehavioralFeatures {
   total_duration_ms: number
 }
 
+// ── Maze profile (for maze-relative behavioral baselines) ──
+
+export interface MazeProfile {
+  /** Number of cells in BFS solution */
+  solutionLength: number
+  /** Cells in solution with >2 open passages (fork points) */
+  decisionPointCount: number
+  /** Direction changes along the solution path */
+  turnCount: number
+  /** Euclidean start-to-exit / optimal path distance (normalized coords) */
+  optimalEfficiency: number
+}
+
 // ── Challenge / Verification ──
 
 export interface Challenge {
