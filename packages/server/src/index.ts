@@ -19,6 +19,7 @@ export type {
   RawEvent,
   BehavioralFeatures,
   MazeConfig,
+  MazeProfile,
   Maze,
   Point,
 } from '@cerno/core'

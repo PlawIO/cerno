@@ -470,8 +470,19 @@ export function Cerno({
   )
 }
 
-// Simple CSS spinner as inline SVG
+// Hoist keyframes so it's injected once, not per render
+const SPINNER_KEYFRAMES = `@keyframes cerno-spin { to { transform: rotate(360deg); } }`
+let keyframesInjected = false
+function injectKeyframes() {
+  if (keyframesInjected || typeof document === 'undefined') return
+  const style = document.createElement('style')
+  style.textContent = SPINNER_KEYFRAMES
+  document.head.appendChild(style)
+  keyframesInjected = true
+}
+
 function Spinner({ isDark }: { isDark: boolean }) {
+  injectKeyframes()
   const color = isDark ? '#94a3b8' : '#64748b'
   return (
     <svg
@@ -481,7 +492,6 @@ function Spinner({ isDark }: { isDark: boolean }) {
       fill="none"
       style={{ animation: 'cerno-spin 0.8s linear infinite' }}
     >
-      <style>{`@keyframes cerno-spin { to { transform: rotate(360deg); } }`}</style>
       <circle cx="8" cy="8" r="6" stroke={color} strokeWidth="2" strokeDasharray="28 10" strokeLinecap="round" />
     </svg>
   )

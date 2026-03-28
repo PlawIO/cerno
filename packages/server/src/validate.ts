@@ -4,6 +4,7 @@ import {
   type ValidationResult,
   ErrorCode,
   extractFeatures,
+  computeMazeProfile,
 } from '@cerno/core'
 import type { ServerConfig } from './types.js'
 import { verifyPow } from './pow-verify.js'
@@ -164,8 +165,11 @@ export async function validateSubmission(
   }
 
   // 6. Extract features server-side (trustless) and score
+  //    Maze-relative baselines adapt scoring to THIS maze's topology,
+  //    not generic mouse-movement research. Reduces false positives on easy mazes.
   const features = extractFeatures(request.events)
-  const score = scoreBehavior(features)
+  const mazeProfile = computeMazeProfile(mazeResult.maze)
+  const score = scoreBehavior(features, mazeProfile)
 
   if (score < threshold) {
     return {

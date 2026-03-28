@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@cerno/react?color=0ea5e9&label=%40cerno%2Freact)](https://www.npmjs.com/package/@cerno/react)
 [![npm](https://img.shields.io/npm/v/@cerno/server?color=0ea5e9&label=%40cerno%2Fserver)](https://www.npmjs.com/package/@cerno/server)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
-[![Tests](https://img.shields.io/badge/tests-48%20passing-22c55e)](./packages)
+[![Tests](https://img.shields.io/badge/tests-63%20passing-22c55e)](./packages)
 
 AI browser agents can solve reCAPTCHA. They pass hCaptcha. They click checkboxes, recognize traffic lights, and type text. What they cannot do is move a mouse like a human.
 
@@ -155,22 +155,31 @@ Tokens are:
 
 | Package | Description | Size |
 |---------|-------------|------|
-| [`@cerno/core`](./packages/core) | Seeded PRNG, Growing Tree maze algorithm, BFS solver, 6-feature behavioral extractor with 60Hz resampling | 10.8 KB |
-| [`@cerno/react`](./packages/react) | Drop-in React component. Canvas renderer, pointer + keyboard collectors, PoW web worker, WebCrypto key binding | 28.5 KB |
-| [`@cerno/server`](./packages/server) | 8-step validation pipeline, deterministic z-score behavioral scoring, JWT tokens, CaptchaStore interface | 11.2 KB |
+| [`@cerno/core`](./packages/core) | Seeded PRNG, Growing Tree maze algorithm, BFS solver, maze profiling, 6-feature behavioral extractor with 60Hz resampling | 12.4 KB |
+| [`@cerno/react`](./packages/react) | Drop-in React component. Canvas renderer, pointer + keyboard collectors, PoW web worker, WebCrypto key binding | 28.6 KB |
+| [`@cerno/server`](./packages/server) | 8-step validation pipeline, maze-relative behavioral scoring, JWT tokens, CaptchaStore interface | 12.4 KB |
 
 ---
 
 ## Behavioral scoring
 
-No ML on the hot path. Pure deterministic math.
+No ML on the hot path. Pure deterministic math. **Maze-relative baselines.**
 
-For each feature, we compute a z-score against a human baseline distribution from published research, then apply a sigmoid transform to get a 0–1 score:
+For each feature, we compute a z-score against baselines, then apply a sigmoid transform:
 
 ```
-featureScore = 1 / (1 + |value - humanMean| / humanStd)
+featureScore = 1 / (1 + |value - baseline.mean| / baseline.std)
 finalScore   = weightedAverage(featureScores) × penalties
 ```
+
+**Two kinds of baselines:**
+
+| Type | Features | Source |
+|------|----------|--------|
+| Motor control (maze-independent) | `velocity_std`, `jerk_std`, `movement_onset_ms` | Static. These measure how you move, not where. |
+| Topology-dependent (maze-relative) | `path_efficiency`, `pause_count`, `angular_velocity_entropy` | Computed from THIS maze's BFS solution, decision points, and turn count. |
+
+Published mouse-movement baselines assume free-form movement. A maze constrains the path. A human solving an easy 4x4 maze behaves differently than one solving a complex 12x12. Hardcoded baselines would reject real humans on easy mazes and miss bots on hard ones. Cerno computes a `MazeProfile` (solution length, decision point count, turn count, optimal efficiency) and derives expected feature ranges from the maze topology.
 
 Penalties for:
 - **Low sample count** (<20 points): not enough data is suspicious
@@ -232,23 +241,23 @@ POST /verify      →  { success: true, token, score }
 ```bash
 bun install
 bun run build   # all packages + landing page
-bun test        # 48 tests across 7 files
+bun test        # 63 tests across 7 files
 ```
 
 ```
 Test Files  7 passed
-     Tests  48 passed
+     Tests  63 passed
 
 packages/core:
   seeded-prng.test.ts        4 tests  (determinism, range, distribution)
-  maze-generator.test.ts    13 tests  (determinism, solvability, wall integrity, reachability)
+  maze-generator.test.ts    19 tests  (determinism, solvability, wall integrity, maze profiles)
   feature-extractor.test.ts  9 tests  (human vs bot, 120Hz resampling, edge cases)
 
 packages/server:
-  behavioral-scoring.test.ts  7 tests  (baselines, NaN guard, penalties)
+  behavioral-scoring.test.ts 13 tests  (baselines, maze-relative adaptation, NaN guard, penalties)
   pow-verify.test.ts          4 tests  (valid/invalid proofs, difficulty)
   token.test.ts               5 tests  (JWT round-trip, replay prevention, session binding)
-  validate.test.ts            6 tests  (full pipeline, rate limiting, replay)
+  validate.test.ts            9 tests  (e2e round-trip, input validation, site_key binding, rate limiting, replay)
 ```
 
 ---

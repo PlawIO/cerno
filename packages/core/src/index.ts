@@ -1,6 +1,6 @@
 export * from './types.js'
 export { CaptchaError } from './errors.js'
 export { mulberry32 } from './seeded-prng.js'
-export { generateMaze, solveMaze, validatePath } from './maze-generator.js'
+export { generateMaze, solveMaze, validatePath, computeMazeProfile } from './maze-generator.js'
 export { extractFeatures } from './feature-extractor.js'
 export { RENDERING } from './rendering-config.js'
