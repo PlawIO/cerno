@@ -1,5 +1,5 @@
-import type { Maze, RawEvent } from '@cerno/core'
-import { Wall } from '@cerno/core'
+import type { Maze, RawEvent } from '@cernosh/core'
+import { Wall } from '@cernosh/core'
 
 export interface KeyboardCollector {
   start(): void

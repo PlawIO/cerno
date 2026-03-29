@@ -22,6 +22,6 @@ export type {
   MazeProfile,
   Maze,
   Point,
-} from '@cerno/core'
+} from '@cernosh/core'
 
-export { ErrorCode, CaptchaError } from '@cerno/core'
+export { ErrorCode, CaptchaError } from '@cernosh/core'

@@ -1,5 +1,5 @@
 {
-  "name": "@cerno/worker",
+  "name": "@cernosh/worker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cerno/core": "workspace:*",
-    "@cerno/server": "workspace:*"
+    "@cernosh/core": "workspace:*",
+    "@cernosh/server": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241224.0",

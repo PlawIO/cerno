@@ -1,5 +1,5 @@
-import { createChallenge, validateSubmission, ErrorCode } from '@cerno/server'
-import type { ServerConfig, ValidationRequest } from '@cerno/server'
+import { createChallenge, validateSubmission, ErrorCode } from '@cernosh/server'
+import type { ServerConfig, ValidationRequest } from '@cernosh/server'
 import { CloudflareKVStore } from './kv-store.js'
 
 export interface Env {

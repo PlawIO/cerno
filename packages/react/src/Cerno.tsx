@@ -5,8 +5,8 @@ import type {
   RawEvent,
   ValidationRequest,
   ValidationResult,
-} from '@cerno/core'
-import { extractFeatures, generateMaze } from '@cerno/core'
+} from '@cernosh/core'
+import { extractFeatures, generateMaze, RENDERING } from '@cernosh/core'
 import { MazeCanvas } from './MazeCanvas.js'
 import { generateEphemeralKeyPair } from './crypto-binding.js'
 
@@ -297,6 +297,7 @@ export function Cerno({
           pow_proof: pow,
           public_key: keyPair.publicKeyBase64,
           timestamp: Date.now(),
+          cell_size: size === 'compact' ? 28 : RENDERING.CELL_SIZE,
         }
 
         const res = await fetch(`${apiUrl}/verify`, {

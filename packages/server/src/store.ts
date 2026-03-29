@@ -1,4 +1,4 @@
-import type { Challenge } from '@cerno/core'
+import type { Challenge } from '@cernosh/core'
 import type { CaptchaStore } from './types.js'
 
 interface TimedEntry<T> {

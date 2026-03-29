@@ -1,5 +1,5 @@
 {
-  "name": "@cerno/react",
+  "name": "@cernosh/react",
   "version": "0.1.0",
   "description": "Drop-in React CAPTCHA component for Cerno: canvas maze renderer, pointer/keyboard collectors, PoW web worker, WebCrypto binding",
   "license": "Apache-2.0",
@@ -29,7 +29,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@cerno/core": "^0.1.0"
+    "@cernosh/core": "^0.1.0"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

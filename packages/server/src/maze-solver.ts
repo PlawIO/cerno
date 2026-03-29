@@ -1,5 +1,5 @@
-import { generateMaze, validatePath } from '@cerno/core'
-import type { Maze, Point, RawEvent } from '@cerno/core'
+import { generateMaze, validatePath } from '@cernosh/core'
+import type { Maze, Point, RawEvent } from '@cernosh/core'
 
 export interface MazeValidationResult {
   valid: boolean

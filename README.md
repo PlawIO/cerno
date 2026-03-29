@@ -2,8 +2,8 @@
 
 **The last line between AI agents and your users.**
 
-[![npm](https://img.shields.io/npm/v/@cerno/react?color=0ea5e9&label=%40cerno%2Freact)](https://www.npmjs.com/package/@cerno/react)
-[![npm](https://img.shields.io/npm/v/@cerno/server?color=0ea5e9&label=%40cerno%2Fserver)](https://www.npmjs.com/package/@cerno/server)
+[![npm](https://img.shields.io/npm/v/@cernosh/react?color=0ea5e9&label=%40cernosh%2Freact)](https://www.npmjs.com/package/@cernosh/react)
+[![npm](https://img.shields.io/npm/v/@cernosh/server?color=0ea5e9&label=%40cernosh%2Fserver)](https://www.npmjs.com/package/@cernosh/server)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
 [![Tests](https://img.shields.io/badge/tests-63%20passing-22c55e)](./packages)
 
@@ -51,13 +51,13 @@ All features are re-extracted server-side from raw events. The client cannot lie
 ## Quick start
 
 ```bash
-npm install @cerno/react @cerno/server
+npm install @cernosh/react @cernosh/server
 ```
 
 ### Drop the widget in
 
 ```tsx
-import { Cerno } from '@cerno/react'
+import { Cerno } from '@cernosh/react'
 
 function ProtectedPage() {
   return (
@@ -73,8 +73,8 @@ function ProtectedPage() {
 ### Validate on the server
 
 ```typescript
-import { createChallenge, validateSubmission, verifyToken } from '@cerno/server'
-import { MemoryStore } from '@cerno/server'
+import { createChallenge, validateSubmission, verifyToken } from '@cernosh/server'
+import { MemoryStore } from '@cernosh/server'
 
 const config = {
   secret: process.env.CERNO_SECRET!,
@@ -155,9 +155,9 @@ Tokens are:
 
 | Package | Description | Size |
 |---------|-------------|------|
-| [`@cerno/core`](./packages/core) | Seeded PRNG, Growing Tree maze algorithm, BFS solver, maze profiling, 6-feature behavioral extractor with 60Hz resampling | 12.4 KB |
-| [`@cerno/react`](./packages/react) | Drop-in React component. Canvas renderer, pointer + keyboard collectors, PoW web worker, WebCrypto key binding | 28.6 KB |
-| [`@cerno/server`](./packages/server) | 8-step validation pipeline, maze-relative behavioral scoring, JWT tokens, CaptchaStore interface | 12.4 KB |
+| [`@cernosh/core`](./packages/core) | Seeded PRNG, Growing Tree maze algorithm, BFS solver, maze profiling, 6-feature behavioral extractor with 60Hz resampling | 12.4 KB |
+| [`@cernosh/react`](./packages/react) | Drop-in React component. Canvas renderer, pointer + keyboard collectors, PoW web worker, WebCrypto key binding | 28.6 KB |
+| [`@cernosh/server`](./packages/server) | 8-step validation pipeline, maze-relative behavioral scoring, JWT tokens, CaptchaStore interface | 12.4 KB |
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "name": "@cerno/server",
+  "name": "@cernosh/server",
   "version": "0.1.0",
   "description": "Server-side validation pipeline for Cerno CAPTCHA: maze-relative behavioral scoring, PoW verification, JWT tokens, CaptchaStore interface",
   "license": "Apache-2.0",
@@ -29,7 +29,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@cerno/core": "^0.1.0",
+    "@cernosh/core": "^0.1.0",
     "jose": "^6.0.0"
   }
 }

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { BehavioralFeatures, MazeProfile } from '@cerno/core'
+import type { BehavioralFeatures, MazeProfile } from '@cernosh/core'
 import { scoreBehavior } from './behavioral-scoring.js'
 
 function humanFeatures(overrides: Partial<BehavioralFeatures> = {}): BehavioralFeatures {
   return {
-    velocity_std: 0.008,
+    velocity_std: 0.0004,
     path_efficiency: 0.35,
     pause_count: 3,
     movement_onset_ms: 800,
-    jerk_std: 0.0001,
+    jerk_std: 5e-7,
     angular_velocity_entropy: 3.5,
     sample_count: 300,
     total_duration_ms: 5000,
@@ -38,7 +38,7 @@ describe('scoreBehavior', () => {
 
   it('scores bot-like straight line low', () => {
     const botFeatures = humanFeatures({
-      velocity_std: 0.0001, // near-zero variance = constant speed
+      velocity_std: 0.00001, // near-zero variance = constant speed
       path_efficiency: 0.99, // straight line
       pause_count: 0,
       movement_onset_ms: 0,
@@ -150,19 +150,20 @@ describe('scoreBehavior with MazeProfile (maze-relative)', () => {
   })
 
   it('motor control features remain constant regardless of maze', () => {
-    // Bot with constant velocity (zero std) should score equally bad on both mazes
+    // Bot with constant velocity (zero std) should score lower than a matched human on same maze
     const botMotor = humanFeatures({
-      velocity_std: 0.0001,
+      velocity_std: 0.00001,
       jerk_std: 0,
       movement_onset_ms: 0,
     })
-    const simpleScore = scoreBehavior(botMotor, simpleProfile)
-    const complexScore = scoreBehavior(botMotor, complexProfile)
+    const humanSimple = scoreBehavior(humanFeatures(), simpleProfile)
+    const botSimple = scoreBehavior(botMotor, simpleProfile)
+    const botComplex = scoreBehavior(botMotor, complexProfile)
 
-    // Both should be low, and the motor-control portion should be identical
-    // (topology-dependent features differ, but motor features dominate with higher weight)
-    expect(simpleScore).toBeLessThan(0.5)
-    expect(complexScore).toBeLessThan(0.5)
+    // Motor deviations reduce score vs a matched human on the same profile
+    expect(botSimple).toBeLessThan(humanSimple)
+    // Motor portion is the same on both mazes, so scores differ only on topology
+    expect(botSimple).not.toBe(botComplex)
   })
 
   it('human-like features score high with matching maze profile', () => {

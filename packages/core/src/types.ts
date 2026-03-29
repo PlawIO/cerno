@@ -101,6 +101,8 @@ export interface ValidationRequest {
   pow_proof: { nonce: number; hash: string }
   public_key: string
   timestamp: number
+  /** Canvas cell size used by the client (defaults to RENDERING.CELL_SIZE) */
+  cell_size?: number
 }
 
 export interface ValidationResult {
