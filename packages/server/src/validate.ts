@@ -5,7 +5,9 @@ import {
   ErrorCode,
   extractFeatures,
   computeMazeProfile,
-} from '@cerno/core'
+  RENDERING,
+  renormalizeEvents,
+} from '@cernosh/core'
 import type { ServerConfig } from './types.js'
 import { verifyPow } from './pow-verify.js'
 import { validateMazePath } from './maze-solver.js'
@@ -148,10 +150,22 @@ export async function validateSubmission(
     }
   }
 
-  // 5. Verify maze path (dimensions come from challenge, not config, ensuring client/server match)
+  // 5. Renormalize events from canvas-relative to maze-grid-relative coordinates.
+  //    The mouse collector normalizes to the full canvas (including margins and
+  //    instruction text), but validatePath and extractFeatures expect coordinates
+  //    normalized to the maze grid area only.
+  const cellSize = request.cell_size ?? RENDERING.CELL_SIZE
+  const correctedEvents = renormalizeEvents(
+    request.events,
+    challenge.maze_width,
+    challenge.maze_height,
+    cellSize,
+  )
+
+  // 6. Verify maze path (dimensions come from challenge, not config, ensuring client/server match)
   const mazeResult = validateMazePath(
     request.maze_seed,
-    request.events,
+    correctedEvents,
     challenge.maze_width,
     challenge.maze_height,
     challenge.maze_difficulty,
@@ -164,10 +178,10 @@ export async function validateSubmission(
     }
   }
 
-  // 6. Extract features server-side (trustless) and score
+  // 7. Extract features server-side (trustless) and score
   //    Maze-relative baselines adapt scoring to THIS maze's topology,
   //    not generic mouse-movement research. Reduces false positives on easy mazes.
-  const features = extractFeatures(request.events)
+  const features = extractFeatures(correctedEvents)
   const mazeProfile = computeMazeProfile(mazeResult.maze)
   const score = scoreBehavior(features, mazeProfile)
 

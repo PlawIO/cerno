@@ -1,5 +1,5 @@
 {
-  "name": "@cerno/core",
+  "name": "@cernosh/core",
   "version": "0.1.0",
   "description": "Shared types, seeded PRNG, Growing Tree maze generator, BFS solver, maze profiling, and 6-feature behavioral extractor for Cerno CAPTCHA",
   "license": "Apache-2.0",

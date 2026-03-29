@@ -1,4 +1,4 @@
-import type { RawEvent } from '@cerno/core'
+import type { RawEvent } from '@cernosh/core'
 
 export interface MouseCollector {
   start(): void

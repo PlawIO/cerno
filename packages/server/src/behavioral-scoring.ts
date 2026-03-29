@@ -1,4 +1,4 @@
-import type { BehavioralFeatures, MazeProfile } from '@cerno/core'
+import type { BehavioralFeatures, MazeProfile } from '@cernosh/core'
 
 interface FeatureBaseline {
   mean: number
@@ -14,13 +14,18 @@ type FeatureKey = keyof Pick<
 /**
  * Static baselines for motor-control features (maze-independent).
  * These measure how you move, not where you move.
+ *
+ * Calibrated for maze-grid-normalized coordinates (after renormalization).
+ * In this space, one cell = 1/mazeWidth normalized units. Human maze solvers
+ * move in discrete cell-to-cell bursts with pauses between, producing
+ * velocity_std ~0.0003-0.0005 and very small jerk_std.
  */
 const MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
   'velocity_std' | 'movement_onset_ms' | 'jerk_std'
 > = {
-  velocity_std:      { mean: 0.008,  std: 0.003,   weight: 1.0 },
+  velocity_std:      { mean: 0.0004, std: 0.0003,  weight: 1.0 },
   movement_onset_ms: { mean: 800,    std: 400,     weight: 0.6 },
-  jerk_std:          { mean: 0.0001, std: 0.00005, weight: 1.5 },
+  jerk_std:          { mean: 5e-7,   std: 5e-7,    weight: 1.0 },
 }
 
 /**
@@ -96,8 +101,10 @@ export function scoreBehavior(features: BehavioralFeatures, profile?: MazeProfil
       ? Math.abs(value - baseline.mean) / baseline.std
       : 0
 
-    // Sigmoid-like: 1.0 = perfect human, approaches 0 for extreme deviation
-    const featureScore = 1 / (1 + zScore)
+    // Gaussian: 1.0 = perfect match, degrades gently for normal human variance
+    // (z=2 → 0.80, z=3 → 0.61) but still penalizes extreme deviations (z=5 → 0.25)
+    const k = 3
+    const featureScore = Math.exp(-0.5 * (zScore / k) ** 2)
 
     weightedSum += featureScore * baseline.weight
     totalWeight += baseline.weight

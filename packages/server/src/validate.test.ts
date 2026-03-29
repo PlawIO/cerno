@@ -1,9 +1,30 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { type RawEvent, generateMaze } from '@cerno/core'
+import { type RawEvent, generateMaze, RENDERING } from '@cernosh/core'
 import { createChallenge, validateSubmission } from './validate.js'
 import { verifyToken } from './token.js'
 import { MemoryStore } from './store.js'
 import type { ServerConfig } from './types.js'
+
+const INSTRUCTION_TEXT_HEIGHT = 24
+
+/**
+ * Convert maze-grid-normalized coords to canvas-normalized coords.
+ * Inverse of renormalizeEvents — simulates what the mouse collector produces.
+ */
+function toCanvasCoords(
+  x: number, y: number, mazeWidth: number, mazeHeight: number,
+): { x: number; y: number } {
+  const cellSize = RENDERING.CELL_SIZE
+  const margin = RENDERING.MARGIN
+  const mazePixelW = mazeWidth * cellSize
+  const mazePixelH = mazeHeight * cellSize
+  const canvasW = mazePixelW + margin * 2
+  const canvasH = mazePixelH + margin * 2 + INSTRUCTION_TEXT_HEIGHT
+  return {
+    x: (x * mazePixelW + margin) / canvasW,
+    y: (y * mazePixelH + margin) / canvasH,
+  }
+}
 
 async function solvePoW(challenge: string, difficulty: number): Promise<{ nonce: number; hash: string }> {
   let nonce = 0
@@ -26,46 +47,52 @@ async function solvePoW(challenge: string, difficulty: number): Promise<{ nonce:
 }
 
 function makeHumanEvents(maze: ReturnType<typeof generateMaze>): RawEvent[] {
-  // Generate events that trace the solution path through cell centers
+  // Generate events that trace the solution path through cell centers.
+  // Output canvas-normalized coords (what the mouse collector produces)
+  // so the server's renormalization pipeline is exercised.
   const events: RawEvent[] = []
   const solution = maze.solution
   let t = 0
 
   // Movement onset delay
-  events.push({ t: 0, x: (solution[0].x + 0.5) / maze.width, y: (solution[0].y + 0.5) / maze.height, type: 'down' })
+  const start = toCanvasCoords(
+    (solution[0].x + 0.5) / maze.width,
+    (solution[0].y + 0.5) / maze.height,
+    maze.width, maze.height,
+  )
+  events.push({ t: 0, x: start.x, y: start.y, type: 'down' })
   t += 500
 
   // Add several intermediate points per cell for realistic movement
   for (let i = 0; i < solution.length; i++) {
     const cell = solution[i]
-    const cx = (cell.x + 0.5) / maze.width
-    const cy = (cell.y + 0.5) / maze.height
+    const mazeX = (cell.x + 0.5) / maze.width
+    const mazeY = (cell.y + 0.5) / maze.height
 
     // Multiple points per cell with some jitter
     for (let j = 0; j < 5; j++) {
       t += 16 + Math.random() * 10
-      events.push({
-        t,
-        x: cx + (Math.random() - 0.5) * 0.01,
-        y: cy + (Math.random() - 0.5) * 0.01,
-        type: 'move',
-      })
+      const jitteredX = mazeX + (Math.random() - 0.5) * 0.01
+      const jitteredY = mazeY + (Math.random() - 0.5) * 0.01
+      const canvas = toCanvasCoords(jitteredX, jitteredY, maze.width, maze.height)
+      events.push({ t, x: canvas.x, y: canvas.y, type: 'move' })
     }
 
     // Pause at some cells (decision points)
     if (i % 3 === 0 && i > 0) {
       t += 150
-      events.push({ t, x: cx, y: cy, type: 'move' })
+      const canvas = toCanvasCoords(mazeX, mazeY, maze.width, maze.height)
+      events.push({ t, x: canvas.x, y: canvas.y, type: 'move' })
     }
   }
 
   const lastCell = solution[solution.length - 1]
-  events.push({
-    t: t + 16,
-    x: (lastCell.x + 0.5) / maze.width,
-    y: (lastCell.y + 0.5) / maze.height,
-    type: 'up',
-  })
+  const end = toCanvasCoords(
+    (lastCell.x + 0.5) / maze.width,
+    (lastCell.y + 0.5) / maze.height,
+    maze.width, maze.height,
+  )
+  events.push({ t: t + 16, x: end.x, y: end.y, type: 'up' })
 
   return events
 }
@@ -80,7 +107,7 @@ describe('validate pipeline', () => {
       secret: 'test-secret-for-validation',
       store,
       powDifficulty: 4, // Very low for fast tests
-      scoreThreshold: 0.1, // Very low to focus on pipeline logic, not scoring thresholds
+      scoreThreshold: 0.5, // Default threshold — tests must pass with realistic scoring
       mazeWidth: 8,
       mazeHeight: 8,
       mazeDifficulty: 0.3,

@@ -1,4 +1,4 @@
-import type { CaptchaStore, Challenge } from '@cerno/server'
+import type { CaptchaStore, Challenge } from '@cernosh/server'
 
 export class CloudflareKVStore implements CaptchaStore {
   constructor(private kv: KVNamespace) {}
