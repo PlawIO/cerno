@@ -1525,7 +1525,7 @@ const enableReactGrab = import.meta.env.DEV
           // Local-only fallback — show local score
           var feat = extractFeatures(rawEvents);
           var score = feat ? scoreFeatures(feat) : 0;
-          setHint(score > 0.6 ? 'Human verified — not an agent' : 'Behavioral pattern rejected', score > 0.6 ? '#16a34a' : '#dc2626');
+          setHint(score > 0.6 ? 'Proof of human' : 'Non-human pattern', score > 0.6 ? '#16a34a' : '#dc2626');
           return;
         }
         setHint('Verifying...');
@@ -1551,9 +1551,9 @@ const enableReactGrab = import.meta.env.DEV
 
           var result = await res.json();
           if (result.success) {
-            setHint('Human verified — not an agent', '#16a34a');
+            setHint('Proof of human', '#16a34a');
           } else {
-            setHint(result.error_code || 'Behavioral pattern rejected', '#dc2626');
+            setHint(result.error_code || 'Non-human pattern', '#dc2626');
           }
         } catch (err) {
           setHint('Server: ' + err.message, '#dc2626');
