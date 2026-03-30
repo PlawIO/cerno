@@ -1,0 +1,168 @@
+---
+title: Reputation System
+description: Cross-session behavioral trust that accumulates over time, making Cerno harder to fool at scale.
+---
+
+Cerno's reputation system (Phase 3) builds a behavioral fingerprint across sessions. The same human solving multiple challenges accumulates trust. Behavioral consistency across sessions is extremely hard to fake at scale.
+
+This is Cerno's software equivalent of an iris hash: not "do you have a body" but "do you behave consistently like the same human over time."
+
+## How it works
+
+1. A user completes a challenge and passes validation.
+2. Your application supplies a stable first-party identity as `stable_id`.
+3. The server derives a reputation key from that stable identifier.
+4. Six behavioral features are recorded as a running mean (EMA).
+5. On subsequent sessions, the system compares current behavior against the stored fingerprint.
+6. Consistent behavior earns a trust bonus added to the session score.
+
+## Tracked features
+
+The reputation system tracks six motor-control features across sessions:
+
+| Feature | Signal |
+|---------|--------|
+| `velocity_std` | Speed variance across the trace |
+| `path_efficiency` | Euclidean vs. actual distance |
+| `pause_count` | Hesitations during solving |
+| `jerk_std` | Third derivative of position (muscle jerk) |
+| `angular_velocity_entropy` | Randomness in direction changes |
+| `timing_cv` | Coefficient of variation in timing |
+
+Feature means are blended using an exponential moving average (EMA) with a decay factor of **0.95**:
+
+```
+newMean = previousMean × 0.95 + currentValue × 0.05
+```
+
+## EMA scoring
+
+When a returning user completes a challenge, the final trust score is a weighted blend:
+
+| Weight | Component | Description |
+|--------|-----------|-------------|
+| **60%** | Session score | Current challenge behavioral score |
+| **20%** | Historical trust | Previous trust_score from the store |
+| **20%** | Consistency | How close current features are to stored means |
+
+```
+blendedScore = score × 0.6 + existing.trust_score × 0.2 + consistency × 0.2
+```
+
+The result is clamped to `[0, 1]`.
+
+### Consistency calculation
+
+For each tracked feature, compute relative deviation from the stored mean and apply a negative exponential:
+
+```
+deviation = |current - mean| / |mean|
+featureConsistency = exp(-deviation × 2)
+consistency = average(featureConsistency across all features)
+```
+
+Low deviation produces values close to 1 (high consistency). High deviation drops toward 0.
+
+## Decay mechanics
+
+Trust decays when a user is absent. After **7 days** without a session, stored trust erodes:
+
+```
+decayFactor = 0.9 ^ (staleDays / 7)
+effectiveTrust = trust_score × decayFactor
+```
+
+At 7 days stale, trust drops to 90% of stored value. At 14 days, 81%. At 30 days, roughly 65%.
+
+Records expire entirely after **30 days** (the default TTL on the KV entry).
+
+## API reference
+
+### `reputationKey(stableId)`
+
+Derives a namespaced store key from your app-level stable identifier.
+
+```typescript
+import { reputationKey } from '@cernosh/server'
+
+const key = reputationKey(stableId)
+// => "rep:a1b2c3..."
+```
+
+### `queryReputation(store, key)`
+
+Returns the trust score for a key. Returns `0.5` (neutral) if unknown or if the store does not implement reputation methods. Applies time-based decay automatically.
+
+```typescript
+import { queryReputation } from '@cernosh/server'
+
+const trust = await queryReputation(store, key)
+// 0.5 for unknown users, 0-1 for returning users
+```
+
+### `updateReputation(store, key, score, features, ttlMs?)`
+
+Updates the stored reputation after a validated session. On first session, initializes the record. On subsequent sessions, blends the new score and features using EMA.
+
+```typescript
+import { updateReputation } from '@cernosh/server'
+
+await updateReputation(store, repKey, 0.87, extractedFeatures)
+// Optional: custom TTL (default 30 days)
+await updateReputation(store, repKey, 0.87, extractedFeatures, 60 * 24 * 60 * 60 * 1000)
+```
+
+### `computeConsistencyBonus(features, reputation)`
+
+Computes a bonus score (max **+0.1**) based on how closely current features match the stored fingerprint. Requires at least 2 prior sessions. Confidence scales linearly up to 10 sessions.
+
+```typescript
+import { computeConsistencyBonus } from '@cernosh/server'
+
+const bonus = computeConsistencyBonus(currentFeatures, reputationData)
+// 0 for new users, up to 0.1 for consistent returning users
+```
+
+The bonus is added to the raw behavioral score during validation, before the threshold check.
+
+## KV store integration
+
+Reputation is opt-in. The `CaptchaStore` interface has two optional methods:
+
+```typescript
+interface CaptchaStore {
+  // ... core methods ...
+
+  // Reputation (optional)
+  setReputation?(key: string, data: ReputationData, ttlMs: number): Promise<void>
+  getReputation?(key: string): Promise<ReputationData | null>
+}
+```
+
+If your store does not implement these methods, reputation is skipped. `MemoryStore` includes a
+built-in implementation for development and tests. For production, use a durable strongly
+consistent store. The Cloudflare KV adapter in this repo does not meet that bar.
+
+The `ReputationData` shape stored per key:
+
+```typescript
+interface ReputationData {
+  trust_score: number                       // 0-1 weighted average
+  session_count: number                     // completed sessions
+  feature_means: Partial<BehavioralFeatures> // EMA of tracked features
+  last_seen: number                         // timestamp (ms)
+}
+```
+
+## Pipeline integration
+
+Reputation plugs into the validation pipeline automatically. After behavioral scoring completes, the server:
+
+1. Derives `repKey` from `stable_id`.
+2. Looks up existing reputation data.
+3. Calls `computeConsistencyBonus()` to get a bonus (up to +0.1).
+4. Adds the bonus to the raw score before the threshold check.
+5. After a successful validation, calls `updateReputation()` to persist the updated fingerprint.
+
+Reputation is opt-in. Enable it only when you have both a real stable identity source and durable
+store support.

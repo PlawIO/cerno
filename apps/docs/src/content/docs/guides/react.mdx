@@ -1,0 +1,104 @@
+---
+title: React Component
+description: The current React widget surface, lifecycle, and extension points.
+---
+
+The `@cernosh/react` package exports a default widget for the full browser-side flow:
+
+- challenge fetch
+- deterministic maze rendering
+- pointer and keyboard event capture
+- proof-of-work mining
+- ephemeral P-256 key generation
+- challenge signing
+- optional probe arming and Stroop overlay rendering
+- optional WebAuthn authentication when the server requires or prefers it
+- submission to your verification API
+
+## Installation
+
+```bash
+npm install @cernosh/react
+```
+
+Peer dependencies: `react >= 18`, `react-dom >= 18`.
+
+## Basic usage
+
+```tsx
+import { Cerno } from '@cernosh/react'
+
+function ProtectedForm() {
+  const handleVerify = (token: string) => {
+    fetch('/api/submit', {
+      method: 'POST',
+      body: JSON.stringify({ cerno_token: token }),
+    })
+  }
+
+  return (
+    <Cerno
+      siteKey="your-site-key"
+      sessionId={session.id}
+      stableId={user.id}
+      apiUrl="/api/captcha"
+      onVerify={handleVerify}
+    />
+  )
+}
+```
+
+## Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `siteKey` | `string` | Yes | Site identifier sent with challenge creation and verification |
+| `sessionId` | `string` | Yes | Session identifier bound into the issued verification token |
+| `stableId` | `string` | No | App-level stable identifier used for WebAuthn and reputation |
+| `onVerify` | `(token: string) => void` | Yes | Fires after successful verification |
+| `onError` | `(error: Error) => void` | No | Receives network or verification flow errors |
+| `onExpire` | `() => void` | No | Fires when the current challenge expires and is replaced |
+| `theme` | <code>'light' &#124; 'dark'</code> | No | Visual theme for the widget |
+| `size` | <code>'normal' &#124; 'compact'</code> | No | Controls the rendered cell size and layout density |
+| `apiUrl` | `string` | No | Base URL prefix used for the worker-style routes |
+
+## Lifecycle
+
+1. The component requests a challenge from `{apiUrl}/challenge`.
+2. It regenerates the maze locally from the issued seed.
+3. It starts proof-of-work mining immediately, using a Worker when available and a main-thread fallback otherwise.
+4. It generates an ephemeral P-256 keypair and signs `challenge_id:site_key:expires_at` before submit.
+5. It captures raw interaction events and sends them as `events`.
+6. If the issued challenge requires probes, it calls `{apiUrl}/probe/arm`, renders `StroopOverlay`, then exchanges the result for a `completion_token` via `{apiUrl}/probe/complete`.
+7. If the issued challenge includes `webauthn_request_options`, it calls `navigator.credentials.get()` automatically and includes the assertion in the final payload.
+8. It submits the full payload to `{apiUrl}/verify`.
+9. On success, it calls `onVerify(token)`.
+
+## Exports besides `Cerno`
+
+```tsx
+import {
+  MazeCanvas,
+  StroopOverlay,
+  isWebAuthnAvailable,
+  requestWebAuthnAuthentication,
+  requestWebAuthnRegistration,
+} from '@cernosh/react'
+```
+
+Use these when you want a custom integration instead of the stock widget.
+
+## Accessibility and behavior details
+
+- Keyboard events are supported by the internal collectors.
+- The widget auto-refreshes expired challenges.
+- Reduced-motion is negotiated during challenge issuance. The client does not silently skip a required probe.
+- Friendly error messages are mapped from server error codes before being shown in the component UI.
+- The stock widget automatically performs WebAuthn authentication when the challenge includes
+  `webauthn_request_options`.
+
+## What the stock widget still leaves to you
+
+Credential registration is still an app flow, not a widget flow. You must call
+`/webauthn/register/options` and `/webauthn/register/verify` yourself before the widget can use a
+credential during challenge verification.

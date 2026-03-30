@@ -1,0 +1,169 @@
+<!DOCTYPE html><html lang="en" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-z6wxbfoa"> <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Error Codes | Cerno SDK</title><link rel="canonical" href="https://cerno.sh/docs/reference/errors/"/><link rel="sitemap" href="/docs/sitemap-index.xml"/><script>(function(){var s=localStorage.getItem('starlight-theme');var d=s==='dark'||(!s&&matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')})()</script><link rel="shortcut icon" href="/docs/favicon.svg" type="image/svg+xml"/><meta name="generator" content="Astro v5.18.1"/><meta name="generator" content="Starlight v0.32.6"/><meta property="og:title" content="Error Codes"/><meta property="og:type" content="article"/><meta property="og:url" content="https://cerno.sh/docs/reference/errors/"/><meta property="og:locale" content="en"/><meta property="og:description" content="All error codes returned by the Cerno verification API."/><meta property="og:site_name" content="Cerno SDK"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="All error codes returned by the Cerno verification API."/><script>
+	window.StarlightThemeProvider = (() => {
+		const storedTheme =
+			typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme');
+		const theme =
+			storedTheme ||
+			(window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+		return {
+			updatePickers(theme = storedTheme || 'auto') {
+				document.querySelectorAll('starlight-theme-select').forEach((picker) => {
+					const select = picker.querySelector('select');
+					if (select) select.value = theme;
+					/** @type {HTMLTemplateElement | null} */
+					const tmpl = document.querySelector(`#theme-icons`);
+					const newIcon = tmpl && tmpl.content.querySelector('.' + theme);
+					if (newIcon) {
+						const oldIcon = picker.querySelector('svg.label-icon');
+						if (oldIcon) {
+							oldIcon.replaceChildren(...newIcon.cloneNode(true).childNodes);
+						}
+					}
+				});
+			},
+		};
+	})();
+</script><template id="theme-icons"><svg aria-hidden="true" class="light astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M5 12a1 1 0 0 0-1-1H3a1 1 0 0 0 0 2h1a1 1 0 0 0 1-1Zm.64 5-.71.71a1 1 0 0 0 0 1.41 1 1 0 0 0 1.41 0l.71-.71A1 1 0 0 0 5.64 17ZM12 5a1 1 0 0 0 1-1V3a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Zm5.66 2.34a1 1 0 0 0 .7-.29l.71-.71a1 1 0 1 0-1.41-1.41l-.66.71a1 1 0 0 0 0 1.41 1 1 0 0 0 .66.29Zm-12-.29a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.71-.71a1.004 1.004 0 1 0-1.43 1.41l.73.71ZM21 11h-1a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2Zm-2.64 6A1 1 0 0 0 17 18.36l.71.71a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.76-.66ZM12 6.5a5.5 5.5 0 1 0 5.5 5.5A5.51 5.51 0 0 0 12 6.5Zm0 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm0 3.5a1 1 0 0 0-1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/></svg> <svg aria-hidden="true" class="dark astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.049 8.049 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14 9.784 9.784 0 0 0 2.1-.22 8.11 8.11 0 0 1-7.18 4.32v-.04Z"/></svg> <svg aria-hidden="true" class="auto astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg> </template><link rel="stylesheet" href="/docs/_astro/print.BJ0teN4y.css" media="print"><link rel="stylesheet" href="/docs/_astro/index.pC_8FVVR.css"><script type="module" src="/docs/_astro/page.B1D-nYk3.js"></script></head> <body class="astro-z6wxbfoa"> <a href="#_top" class="astro-k2pmjn64">Skip to content</a>  <div class="page sl-flex astro-r6klnp47"> <header class="header astro-r6klnp47"><div class="header-inner astro-3ef6ksr2"> <div class="header-left astro-3ef6ksr2"> <a href="/" class="logo astro-3ef6ksr2"> <svg class="logo-mark astro-3ef6ksr2" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"> <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="astro-3ef6ksr2"> <line x1="13" y1="3" x2="33" y2="3" class="astro-3ef6ksr2"></line> <line x1="33" y1="3" x2="33" y2="33" class="astro-3ef6ksr2"></line> <line x1="3" y1="33" x2="23" y2="33" class="astro-3ef6ksr2"></line> <line x1="3" y1="3" x2="3" y2="33" class="astro-3ef6ksr2"></line> <line x1="13" y1="13" x2="13" y2="23" class="astro-3ef6ksr2"></line> <line x1="23" y1="3" x2="23" y2="13" class="astro-3ef6ksr2"></line> <line x1="23" y1="23" x2="23" y2="33" class="astro-3ef6ksr2"></line> <line x1="13" y1="23" x2="23" y2="23" class="astro-3ef6ksr2"></line> </g> <path d="M8 3 L8 8 L18 8 L18 18 L28 18 L28 28 L28 33" stroke="#2596be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="astro-3ef6ksr2"></path> </svg>
+Cerno SDK
+</a> </div> <div class="header-center astro-3ef6ksr2"> <site-search class="astro-3ef6ksr2 astro-cpd6rpkr" data-translations="{&#34;placeholder&#34;:&#34;Search&#34;}"> <button data-open-modal disabled aria-label="Search" aria-keyshortcuts="Control+K" class="astro-cpd6rpkr"> <svg aria-hidden="true" class="astro-cpd6rpkr astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.71 20.29 18 16.61A9 9 0 1 0 16.61 18l3.68 3.68a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.39ZM11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"/></svg>  <span class="sl-hidden md:sl-block astro-cpd6rpkr" aria-hidden="true">Search</span> <kbd class="sl-hidden md:sl-flex astro-cpd6rpkr" style="display: none;"> <kbd class="astro-cpd6rpkr">Ctrl</kbd><kbd class="astro-cpd6rpkr">K</kbd> </kbd> </button> <dialog style="padding:0" aria-label="Search" class="astro-cpd6rpkr"> <div class="dialog-frame sl-flex astro-cpd6rpkr">  <button data-close-modal class="sl-flex md:sl-hidden astro-cpd6rpkr"> Cancel </button> <div class="search-container astro-cpd6rpkr"> <div id="starlight__search" class="astro-cpd6rpkr"></div> </div> </div> </dialog> </site-search>  <script>
+	(() => {
+		const openBtn = document.querySelector('button[data-open-modal]');
+		const shortcut = openBtn?.querySelector('kbd');
+		if (!openBtn || !(shortcut instanceof HTMLElement)) return;
+		const platformKey = shortcut.querySelector('kbd');
+		if (platformKey && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)) {
+			platformKey.textContent = '⌘';
+			openBtn.setAttribute('aria-keyshortcuts', 'Meta+K');
+		}
+		shortcut.style.display = '';
+	})();
+</script> <script type="module" src="/docs/_astro/Search.astro_astro_type_script_index_0_lang.CMOHWuLo.js"></script>   </div> <div class="header-right astro-3ef6ksr2"> <a href="/docs/getting-started/" class="astro-3ef6ksr2">Docs</a> <a href="https://github.com/PlawIO/cerno" target="_blank" rel="noopener" class="astro-3ef6ksr2">GitHub</a> <button class="theme-toggle astro-3ef6ksr2" id="docs-theme-toggle" aria-label="Toggle theme"> <svg class="icon-sun astro-3ef6ksr2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5" class="astro-3ef6ksr2"></circle><line x1="12" y1="1" x2="12" y2="3" class="astro-3ef6ksr2"></line><line x1="12" y1="21" x2="12" y2="23" class="astro-3ef6ksr2"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" class="astro-3ef6ksr2"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" class="astro-3ef6ksr2"></line><line x1="1" y1="12" x2="3" y2="12" class="astro-3ef6ksr2"></line><line x1="21" y1="12" x2="23" y2="12" class="astro-3ef6ksr2"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" class="astro-3ef6ksr2"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" class="astro-3ef6ksr2"></line></svg> <svg class="icon-moon astro-3ef6ksr2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" class="astro-3ef6ksr2"></path></svg> <svg class="icon-auto astro-3ef6ksr2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" class="astro-3ef6ksr2"></rect><line x1="8" y1="21" x2="16" y2="21" class="astro-3ef6ksr2"></line><line x1="12" y1="17" x2="12" y2="21" class="astro-3ef6ksr2"></line></svg> </button> </div> </div> <script type="module">document.addEventListener("DOMContentLoaded",()=>{const r=["auto","light","dark"],e=document.getElementById("docs-theme-toggle");if(!e)return;const o=localStorage.getItem("starlight-theme");let a=o==="light"||o==="dark"?o:"auto";function n(t){a=t,e.setAttribute("data-mode",t);let d;t==="auto"?(d=matchMedia("(prefers-color-scheme:dark)").matches,localStorage.removeItem("starlight-theme")):(d=t==="dark",localStorage.setItem("starlight-theme",t)),document.documentElement.setAttribute("data-theme",d?"dark":"light")}e.setAttribute("data-mode",a),e.addEventListener("click",()=>{const t=r[(r.indexOf(a)+1)%r.length];n(t)}),matchMedia("(prefers-color-scheme:dark)").addEventListener("change",()=>{a==="auto"&&n("auto")})});</script> </header> <nav class="sidebar print:hidden astro-r6klnp47" aria-label="Main"> <starlight-menu-button class="print:hidden astro-mnvz5dp6"> <button aria-expanded="false" aria-label="Menu" aria-controls="starlight__sidebar" class="sl-flex md:sl-hidden astro-mnvz5dp6"> <svg aria-hidden="true" class="astro-mnvz5dp6 astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M3 8h18a1 1 0 1 0 0-2H3a1 1 0 0 0 0 2Zm18 8H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Zm0-5H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Z"/></svg>  </button> </starlight-menu-button> <script type="module">class s extends HTMLElement{constructor(){super(),this.btn=this.querySelector("button"),this.btn.addEventListener("click",()=>this.toggleExpanded());const t=this.closest("nav");t&&t.addEventListener("keyup",e=>this.closeOnEscape(e))}setExpanded(t){this.setAttribute("aria-expanded",String(t)),document.body.toggleAttribute("data-mobile-menu-expanded",t)}toggleExpanded(){this.setExpanded(this.getAttribute("aria-expanded")!=="true")}closeOnEscape(t){t.code==="Escape"&&(this.setExpanded(!1),this.btn.focus())}}customElements.define("starlight-menu-button",s);</script>   <div id="starlight__sidebar" class="sidebar-pane astro-r6klnp47"> <div class="sidebar-content sl-flex astro-r6klnp47"> <sl-sidebar-state-persist data-hash="0sr8vbp" class="astro-73nc7vkv"> <script aria-hidden="true">
+		(() => {
+			try {
+				if (!matchMedia('(min-width: 50em)').matches) return;
+				/** @type {HTMLElement | null} */
+				const target = document.querySelector('sl-sidebar-state-persist');
+				const state = JSON.parse(sessionStorage.getItem('sl-sidebar-state') || '0');
+				if (!target || !state || target.dataset.hash !== state.hash) return;
+				window._starlightScrollRestore = state.scroll;
+				customElements.define(
+					'sl-sidebar-restore',
+					class SidebarRestore extends HTMLElement {
+						connectedCallback() {
+							try {
+								const idx = parseInt(this.dataset.index || '');
+								const details = this.closest('details');
+								if (details && typeof state.open[idx] === 'boolean') details.open = state.open[idx];
+							} catch {}
+						}
+					}
+				);
+			} catch {}
+		})();
+	</script>  <ul class="top-level astro-3mzukg6p"> <li class="astro-3mzukg6p"> <details open class="astro-3mzukg6p"> <sl-sidebar-restore data-index="0"></sl-sidebar-restore> <summary class="astro-3mzukg6p"> <div class="group-label astro-3mzukg6p"> <span class="large astro-3mzukg6p">Overview</span>  </div> <svg aria-hidden="true" class="caret astro-3mzukg6p astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg>  </summary> <ul class="astro-3mzukg6p"> <li class="astro-3mzukg6p"> <a href="/docs/getting-started/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Introduction</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/quick-start/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Quick Start</span>  </a> </li> </ul>  </details> </li><li class="astro-3mzukg6p"> <details open class="astro-3mzukg6p"> <sl-sidebar-restore data-index="1"></sl-sidebar-restore> <summary class="astro-3mzukg6p"> <div class="group-label astro-3mzukg6p"> <span class="large astro-3mzukg6p">Guides</span>  </div> <svg aria-hidden="true" class="caret astro-3mzukg6p astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg>  </summary> <ul class="astro-3mzukg6p"> <li class="astro-3mzukg6p"> <a href="/docs/guides/react/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">React Component</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/guides/server/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Server SDK</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/guides/cloudflare-workers/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Cloudflare Workers</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/guides/stroop-probes/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Stroop Probes</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/guides/webauthn/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">WebAuthn Attestation</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/guides/adaptive-pow/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Adaptive Proof-of-Work</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/guides/reputation/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Reputation System</span>  </a> </li> </ul>  </details> </li><li class="astro-3mzukg6p"> <details open class="astro-3mzukg6p"> <sl-sidebar-restore data-index="2"></sl-sidebar-restore> <summary class="astro-3mzukg6p"> <div class="group-label astro-3mzukg6p"> <span class="large astro-3mzukg6p">Concepts</span>  </div> <svg aria-hidden="true" class="caret astro-3mzukg6p astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg>  </summary> <ul class="astro-3mzukg6p"> <li class="astro-3mzukg6p"> <a href="/docs/concepts/behavioral-scoring/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Behavioral Scoring</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/concepts/secret-features/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Secret Features</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/concepts/threat-model/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Threat Model</span>  </a> </li> </ul>  </details> </li><li class="astro-3mzukg6p"> <details open class="astro-3mzukg6p"> <sl-sidebar-restore data-index="3"></sl-sidebar-restore> <summary class="astro-3mzukg6p"> <div class="group-label astro-3mzukg6p"> <span class="large astro-3mzukg6p">Reference</span>  </div> <svg aria-hidden="true" class="caret astro-3mzukg6p astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg>  </summary> <ul class="astro-3mzukg6p"> <li class="astro-3mzukg6p"> <a href="/docs/reference/api/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Challenge API</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/reference/siteverify/" aria-current="false" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">siteverify</span>  </a> </li><li class="astro-3mzukg6p"> <a href="/docs/reference/errors/" aria-current="page" class="astro-3mzukg6p"> <span class="astro-3mzukg6p">Error Codes</span>  </a> </li> </ul>  </details> </li> </ul>   <script aria-hidden="true">
+		(() => {
+			const scroller = document.getElementById('starlight__sidebar');
+			if (!window._starlightScrollRestore || !scroller) return;
+			scroller.scrollTop = window._starlightScrollRestore;
+			delete window._starlightScrollRestore;
+		})();
+	</script> </sl-sidebar-state-persist>  <div class="md:sl-hidden"> <div class="mobile-preferences sl-flex astro-hr3iwuy6"> <div class="sl-flex social-icons astro-hr3iwuy6"> <a href="https://github.com/PlawIO/cerno" rel="me" class="sl-flex astro-v3eac2ob"><span class="sr-only astro-v3eac2ob">GitHub</span><svg aria-hidden="true" class="astro-v3eac2ob astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg> </a> </div>  <script type="module">class s extends HTMLElement{constructor(){super();const e=this.querySelector("select");e&&(e.addEventListener("change",t=>{t.currentTarget instanceof HTMLSelectElement&&(window.location.pathname=t.currentTarget.value)}),window.addEventListener("pageshow",t=>{if(!t.persisted)return;const n=e.querySelector("option[selected]")?.index;n!==e.selectedIndex&&(e.selectedIndex=n??0)}))}}customElements.define("starlight-lang-select",s);</script> </div>  </div> </div> </div> </nav> <div class="main-frame astro-r6klnp47">  <script type="module">const a=document.getElementById("starlight__sidebar"),n=a?.querySelector("sl-sidebar-state-persist"),o="sl-sidebar-state",i=()=>{let t=[];const e=n?.dataset.hash||"";try{const s=sessionStorage.getItem(o),r=JSON.parse(s||"{}");Array.isArray(r.open)&&r.hash===e&&(t=r.open)}catch{}return{hash:e,open:t,scroll:a?.scrollTop||0}},c=t=>{try{sessionStorage.setItem(o,JSON.stringify(t))}catch{}},d=()=>c(i()),l=(t,e)=>{const s=i();s.open[e]=t,c(s)};n?.addEventListener("click",t=>{if(!(t.target instanceof Element))return;const e=t.target.closest("summary")?.closest("details");if(!e)return;const s=e.querySelector("sl-sidebar-restore"),r=parseInt(s?.dataset.index||"");isNaN(r)||l(!e.open,r)});addEventListener("visibilitychange",()=>{document.visibilityState==="hidden"&&d()});addEventListener("pageHide",d);</script> <div class="lg:sl-flex astro-i37eqvod"> <aside class="right-sidebar-container print:hidden astro-i37eqvod"> <div class="right-sidebar astro-i37eqvod"> <script type="module" src="/docs/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.C181hMzK.js"></script><script type="module" src="/docs/_astro/TableOfContents.astro_astro_type_script_index_0_lang.CKWWgpjV.js"></script><div class="lg:sl-hidden astro-rxopquiw"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-sgqokfw3"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-sgqokfw3"><details id="starlight__mobile-toc" class="astro-sgqokfw3"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-sgqokfw3"><div class="toggle sl-flex astro-sgqokfw3">On this page<svg aria-hidden="true" class="caret astro-sgqokfw3 astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </div><span class="display-current astro-sgqokfw3"></span></summary><div class="dropdown astro-sgqokfw3"><ul class="isMobile astro-jtkegaez" style="--depth: 0;"> <li class="astro-jtkegaez" style="--depth: 0;"> <a href="#_top" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 0;"> <a href="#error-codes" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Error codes</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 0;"> <a href="#handling-errors" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Handling errors</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 0;"> <a href="#common-scenarios" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Common scenarios</span> </a> <ul class="isMobile astro-jtkegaez" style="--depth: 1;"> <li class="astro-jtkegaez" style="--depth: 1;"> <a href="#challenge_expired" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">challenge_expired</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#behavioral_rejected" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">behavioral_rejected</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#rate_limited" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">rate_limited</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#invalid_signature" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">invalid_signature</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#probe_failed" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">probe_failed</span> </a>  </li> </ul>  </li> </ul> </div></details></nav></mobile-starlight-toc></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-rxopquiw"><div class="sl-container astro-rxopquiw"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-jtkegaez" style="--depth: 0;"> <li class="astro-jtkegaez" style="--depth: 0;"> <a href="#_top" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 0;"> <a href="#error-codes" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Error codes</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 0;"> <a href="#handling-errors" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Handling errors</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 0;"> <a href="#common-scenarios" class="astro-jtkegaez" style="--depth: 0;"> <span class="astro-jtkegaez" style="--depth: 0;">Common scenarios</span> </a> <ul class="astro-jtkegaez" style="--depth: 1;"> <li class="astro-jtkegaez" style="--depth: 1;"> <a href="#challenge_expired" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">challenge_expired</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#behavioral_rejected" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">behavioral_rejected</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#rate_limited" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">rate_limited</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#invalid_signature" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">invalid_signature</span> </a>  </li><li class="astro-jtkegaez" style="--depth: 1;"> <a href="#probe_failed" class="astro-jtkegaez" style="--depth: 1;"> <span class="astro-jtkegaez" style="--depth: 1;">probe_failed</span> </a>  </li> </ul>  </li> </ul> </nav></starlight-toc></div></div> </div> </aside> <div class="main-pane astro-i37eqvod">  <main data-pagefind-body class="astro-z6wxbfoa" lang="en" dir="ltr">    <div class="content-panel astro-roi5ogue"> <div class="sl-container astro-roi5ogue"> <h1 id="_top" class="astro-c2ojcv73">Error Codes</h1>  </div> </div>  <div class="content-panel astro-roi5ogue"> <div class="sl-container astro-roi5ogue"> <div class="sl-markdown-content"> <p>When verification fails, the API returns <code dir="auto">{ success: false, error_code: "..." }</code> with an appropriate HTTP status.</p>
+<h2 id="error-codes">Error codes</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Code</th><th>HTTP</th><th>Meaning</th></tr></thead><tbody><tr><td><code dir="auto">challenge_not_found</code></td><td>400</td><td>Unknown or already-consumed challenge ID</td></tr><tr><td><code dir="auto">challenge_expired</code></td><td>410</td><td>Challenge is older than 2 minutes</td></tr><tr><td><code dir="auto">invalid_pow</code></td><td>400</td><td>Proof of work didn’t meet the difficulty requirement</td></tr><tr><td><code dir="auto">invalid_path</code></td><td>400</td><td>The submitted path doesn’t solve the maze</td></tr><tr><td><code dir="auto">behavioral_rejected</code></td><td>400</td><td>Behavioral score below threshold</td></tr><tr><td><code dir="auto">rate_limited</code></td><td>429</td><td>Too many attempts from this session</td></tr><tr><td><code dir="auto">invalid_request</code></td><td>400</td><td>Malformed, oversized, or missing required fields</td></tr><tr><td><code dir="auto">invalid_signature</code></td><td>400</td><td>Missing or invalid ECDSA challenge signature</td></tr><tr><td><code dir="auto">public_key_mismatch</code></td><td>400</td><td>Submitted public key does not match the challenge binding</td></tr><tr><td><code dir="auto">probe_failed</code></td><td>400</td><td>Probe completion tokens were missing, invalid, replayed, expired, or incorrect</td></tr><tr><td><code dir="auto">webauthn_failed</code></td><td>400</td><td>Required WebAuthn assertion was missing or assertion verification failed</td></tr></tbody></table>
+<h2 id="handling-errors">Handling errors</h2>
+<p>The React component maps these to user-facing messages and retries where appropriate. For token
+verification, check the <code dir="auto">valid</code> field:</p>
+<div class="expressive-code"><link rel="stylesheet" href="/docs/_astro/ec.tm3va.css"><script type="module" src="/docs/_astro/ec.8zarh.js"></script><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="typescript"><code><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">result</span><span style="--0:#C792EA;--1:#8844AE"> = await </span><span style="--0:#82AAFF;--1:#3B61B0">verifyToken</span><span style="--0:#D6DEEB;--1:#403F53">(token</span><span style="--0:#C792EA;--1:#8844AE">, </span><span style="--0:#D6DEEB;--1:#403F53">options)</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">if</span><span style="--0:#D6DEEB;--1:#403F53"> (</span><span style="--0:#C792EA;--1:#8844AE">!</span><span style="--0:#D6DEEB;--1:#403F53">result</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#7FDBCA;--1:#096E72">valid</span><span style="--0:#D6DEEB;--1:#403F53">) {</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#919F9F;--1:#5D6376">// Token is invalid — require re-verification</span></div></div><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">}</span></div></div></code></pre><div class="copy"><button title="Copy to clipboard" data-copied="Copied!" data-code="const result = await verifyToken(token, options)if (!result.valid) {  // Token is invalid — require re-verification}"><div></div></button></div></figure></div>
+<h2 id="common-scenarios">Common scenarios</h2>
+<h3 id="challenge_expired"><code dir="auto">challenge_expired</code></h3>
+<p>The user took longer than 2 minutes to complete the maze. The widget should automatically request a new challenge.</p>
+<h3 id="behavioral_rejected"><code dir="auto">behavioral_rejected</code></h3>
+<p>The behavioral score fell below the threshold (default 0.6). This can happen with:</p>
+<ul>
+<li>Trackpad users who produce less jerk variance</li>
+<li>Very fast completions on easy mazes</li>
+<li>Unusual input devices</li>
+</ul>
+<p>Consider using calibration mode (threshold 0.3) during initial deployment to collect baseline data before tightening.</p>
+<h3 id="rate_limited"><code dir="auto">rate_limited</code></h3>
+<p>A single server-derived client binding has made too many attempts. Default limit is 3 attempts per
+5-minute window.</p>
+<h3 id="invalid_signature"><code dir="auto">invalid_signature</code></h3>
+<p>The browser did not submit a valid signature over <code dir="auto">challenge_id</code>, or the request omitted the
+ephemeral public key entirely.</p>
+<h3 id="probe_failed"><code dir="auto">probe_failed</code></h3>
+<p>The probe step was required and failed. Causes include:</p>
+<ul>
+<li>missing completion tokens</li>
+<li>forged or replayed completion tokens</li>
+<li>wrong tap target</li>
+<li>completion after the server deadline</li>
+<li>mismatched challenge/session binding</li>
+</ul> </div> <div class="docs-footer-wrapper astro-sz7xmlte"> <div class="pagination-links print:hidden astro-73de2oiz" dir="ltr"> <a href="/docs/reference/siteverify/" rel="prev" class="astro-73de2oiz"> <svg aria-hidden="true" class="astro-73de2oiz astro-arkdeypz" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg>  <span class="astro-73de2oiz"> Previous <br class="astro-73de2oiz"> <span class="link-title astro-73de2oiz">siteverify</span> </span> </a>  </div>  <footer class="site-footer astro-sz7xmlte"> <div class="footer-inner astro-sz7xmlte"> <div class="footer-left astro-sz7xmlte"> <svg class="footer-mark astro-sz7xmlte" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"> <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="astro-sz7xmlte"> <line x1="13" y1="3" x2="33" y2="3" class="astro-sz7xmlte"></line> <line x1="33" y1="3" x2="33" y2="33" class="astro-sz7xmlte"></line> <line x1="3" y1="33" x2="23" y2="33" class="astro-sz7xmlte"></line> <line x1="3" y1="3" x2="3" y2="33" class="astro-sz7xmlte"></line> <line x1="13" y1="13" x2="13" y2="23" class="astro-sz7xmlte"></line> <line x1="23" y1="3" x2="23" y2="13" class="astro-sz7xmlte"></line> <line x1="23" y1="23" x2="23" y2="33" class="astro-sz7xmlte"></line> <line x1="13" y1="23" x2="23" y2="23" class="astro-sz7xmlte"></line> </g> <path d="M8 3 L8 8 L18 8 L18 18 L28 18 L28 28 L28 33" stroke="#2596be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="astro-sz7xmlte"></path> </svg> <span class="footer-name astro-sz7xmlte">Cerno</span> </div> <div class="footer-links astro-sz7xmlte"> <a href="/docs/getting-started/" class="astro-sz7xmlte">Docs</a> <a href="https://github.com/PlawIO/cerno" target="_blank" rel="noopener" class="astro-sz7xmlte">GitHub</a> <a href="https://veto.so" target="_blank" rel="noopener" class="astro-sz7xmlte">veto.so</a> </div> <div class="footer-right astro-sz7xmlte"> <span class="astro-sz7xmlte">Apache 2.0</span> </div> </div> </footer> </div>  </div> </div>   </main> </div> </div>  </div> </div>  </body></html>

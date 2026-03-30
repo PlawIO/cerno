@@ -1,0 +1,57 @@
+---
+title: Behavioral Scoring
+description: How Cerno scores human vs. AI behavior using maze-relative baselines.
+---
+
+Cerno's behavioral scoring uses deterministic math — no ML on the hot path. Pure statistical thresholds against known human distributions.
+
+## The 6 features
+
+| Feature | What it measures | Why AI fails |
+|---------|-----------------|--------------|
+| `velocity_std` | Speed variance across the trace | Bots move at constant velocity |
+| `path_efficiency` | Euclidean / actual distance | Bots take straight-line paths |
+| `pause_count` | Hesitations over 100ms | Bots don't pause at decision points |
+| `movement_onset_ms` | Reaction time before first move | Bots start instantly |
+| `jerk_std` | Third derivative of position | Human muscle control is jerky |
+| `angular_velocity_entropy` | Randomness in direction changes | Bot paths have low directional entropy |
+
+All features are re-extracted server-side from raw events. The client cannot lie about them.
+
+## Scoring algorithm
+
+For each feature, compute a z-score against baselines, then apply a sigmoid:
+
+```
+featureScore = 1 / (1 + |value - baseline.mean| / baseline.std)
+finalScore   = weightedAverage(featureScores) × penalties
+```
+
+## Maze-relative baselines
+
+Published mouse-movement baselines assume free-form movement. A maze constrains the path. A human solving an easy 4x4 maze behaves differently than one solving a complex 12x12.
+
+Cerno computes a **MazeProfile** for each generated maze:
+
+- Solution length (BFS shortest path)
+- Decision point count (junctions with 3+ options)
+- Turn count (direction changes in the solution)
+- Optimal efficiency (straight-line / solution path length)
+
+From this profile, it derives expected feature ranges.
+
+### Two baseline types
+
+| Type | Features | Source |
+|------|----------|--------|
+| **Motor control** (maze-independent) | `velocity_std`, `jerk_std`, `movement_onset_ms` | Static. These measure *how* you move, not *where*. |
+| **Topology-dependent** (maze-relative) | `path_efficiency`, `pause_count`, `angular_velocity_entropy` | Computed from THIS maze's topology. |
+
+## Penalties
+
+- **Low sample count** (fewer than 20 pointer events): not enough data is suspicious
+- **Fast completion** (under 2 seconds): humans don't solve mazes instantly
+
+## Threshold
+
+Default: **0.5** (configurable). Calibration mode drops it to **0.3** for initial deployments while you collect real user data.

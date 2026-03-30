@@ -1,0 +1,310 @@
+---
+title: Worker API
+description: Current browser-facing and worker route payloads for challenge, probe, verification, and WebAuthn flows.
+---
+
+The stock React widget calls `POST /challenge`, optional probe routes, and `POST /verify`. The
+worker also exposes WebAuthn registration routes and `POST /siteverify`.
+
+## `POST /challenge`
+
+Creates a new verification challenge.
+
+### Request
+
+```json
+{
+  "site_key": "your-site-key",
+  "stable_id": "user-123",
+  "client_capabilities": {
+    "reduced_motion": false,
+    "webauthn_available": true,
+    "pointer_types": ["mouse"]
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "challenge_type": "maze_stroop",
+  "maze_seed": 827461,
+  "maze_width": 8,
+  "maze_height": 8,
+  "maze_difficulty": 0.6,
+  "pow_challenge": "a1b2c3d4e5f6...",
+  "pow_difficulty": 18,
+  "site_key": "your-site-key",
+  "created_at": 1711727880000,
+  "expires_at": 1711728000,
+  "requirements": {
+    "probe": {
+      "mode": "required",
+      "required_completion_count": 1
+    },
+    "webauthn": {
+      "mode": "preferred"
+    }
+  },
+  "probes": [
+    {
+      "id": "probe-1",
+      "type": "color_tap",
+      "instruction": "Tap the blue cell",
+      "target_color": "blue",
+      "distractor_colors": ["red", "green"],
+      "cells": [
+        { "x": 4, "y": 2, "color": "blue", "isTarget": true }
+      ],
+      "trigger_cell": { "x": 3, "y": 2 }
+    }
+  ],
+  "webauthn_request_options": {
+    "challenge": "base64url",
+    "rpId": "example.com",
+    "timeout": 60000,
+    "userVerification": "required",
+    "allowCredentials": [
+      { "id": "credential-id", "type": "public-key", "transports": ["internal"] }
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique challenge identifier |
+| `challenge_type` | <code>'maze' &#124; 'maze_stroop'</code> | Whether probes were injected |
+| `maze_seed` | `number` | Seed for deterministic maze generation |
+| `maze_width` | `number` | Maze grid width |
+| `maze_height` | `number` | Maze grid height |
+| `maze_difficulty` | `number` | Difficulty parameter |
+| `pow_challenge` | `string` | Hex string for proof-of-work input |
+| `pow_difficulty` | `number` | Required leading zero bits |
+| `site_key` | `string` | Site key the challenge was issued for |
+| `created_at` | `number` | Creation time in milliseconds |
+| `expires_at` | `number` | Expiry time in milliseconds |
+| `cell_size` | `number` | Server-authoritative maze cell size |
+| `requirements` | `ChallengeRequirements` | Server-declared probe and WebAuthn requirements |
+| `probes` | `StroopProbe[]` | Present when the challenge type is `maze_stroop` |
+| `webauthn_request_options` | `WebAuthnRequestOptionsJSON` | Present when the supplied `stable_id` has registered credentials and the server wants a WebAuthn assertion |
+
+## `POST /probe/arm`
+
+Arms a probe after the client reaches the trigger cell.
+
+### Request
+
+```json
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "site_key": "your-site-key",
+  "session_id": "user-session-id",
+  "probe_id": "probe-1",
+  "events": [
+    { "x": 0.126, "y": 0.124, "t": 12, "type": "down" },
+    { "x": 0.125, "y": 0.189, "t": 28, "type": "move" }
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "armed_at": 1711728001234,
+  "deadline_at": 1711728006234
+}
+```
+
+## `POST /probe/complete`
+
+Completes an armed probe and returns a signed completion token.
+
+### Request
+
+```json
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "user-session-id",
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "tapped_cell": { "x": 4, "y": 2 }
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "completion_token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+## `POST /verify`
+
+Validates a completed challenge submission.
+
+### Request
+
+```json
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "site_key": "your-site-key",
+  "session_id": "user-session-id",
+  "maze_seed": 827461,
+  "events": [
+    { "x": 0.126, "y": 0.124, "t": 12, "type": "down" },
+    { "x": 0.125, "y": 0.189, "t": 28, "type": "move" }
+  ],
+  "pow_proof": { "nonce": 48291, "hash": "00af2c..." },
+  "public_key": "eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2Iiwi...",
+  "signature": "MEQCIA...",
+  "timestamp": 1711728001234,
+  "stable_id": "user-123",
+  "probe_completion_tokens": ["eyJhbGciOiJIUzI1NiJ9..."],
+  "webauthn": {
+    "id": "credential-id",
+    "rawId": "credential-id",
+    "type": "public-key",
+    "response": {
+      "clientDataJSON": "base64url",
+      "authenticatorData": "base64url",
+      "signature": "base64url",
+      "userHandle": "base64url"
+    }
+  }
+}
+```
+
+### Required fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `challenge_id` | `string` | Must reference an unconsumed challenge |
+| `site_key` | `string` | Must match the issued challenge |
+| `session_id` | `string` | Bound into the token |
+| `maze_seed` | `number` | Present in the request shape; server trusts the challenge seed instead |
+| `events` | `RawEvent[]` | Raw interaction stream |
+| `pow_proof` | `{ nonce: number; hash: string }` | Submitted proof-of-work |
+| `public_key` | `string` | Base64-encoded JWK |
+| `signature` | `string` | ECDSA P-256 signature over `challenge_id:site_key:expires_at` |
+| `timestamp` | `number` | Client timestamp |
+
+### Optional fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `stable_id` | `string` | Required for WebAuthn and reputation-backed flows |
+| `cell_size` | `number` | Client-reported cell size; server uses issued `challenge.cell_size` |
+| `input_type` | <code>'mouse' &#124; 'touch' &#124; 'keyboard'</code> | Observability hint only |
+| `rate_limit_binding` | `string` | Server-derived binding; browser clients should not set this directly |
+| `probe_completion_tokens` | `string[]` | Required when the challenge includes probes |
+| `webauthn` | `AuthenticationResponseJSON` | Required when `requirements.webauthn.mode === 'required'` |
+
+### Response (success)
+
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+### Response (failure)
+
+```json
+{
+  "success": false,
+  "score": 0,
+  "error_code": "behavioral_rejected"
+}
+```
+
+The token is:
+
+- bound to the `session_id`
+- single-use
+- valid for 60 seconds
+
+## `POST /webauthn/register/options`
+
+Starts credential registration for a `stable_id`.
+
+### Request
+
+```json
+{
+  "site_key": "your-site-key",
+  "stable_id": "user-123"
+}
+```
+
+### Response
+
+```json
+{
+  "session_id": "registration-session-id",
+  "options": {
+    "challenge": "base64url",
+    "rp": { "id": "example.com", "name": "Cerno" },
+    "user": {
+      "id": "base64url",
+      "name": "user-123",
+      "displayName": "user-123"
+    }
+  }
+}
+```
+
+## `POST /webauthn/register/verify`
+
+Consumes the registration session and stores the credential.
+
+### Request
+
+```json
+{
+  "session_id": "registration-session-id",
+  "response": {
+    "id": "credential-id",
+    "rawId": "credential-id",
+    "type": "public-key",
+    "response": {
+      "clientDataJSON": "base64url",
+      "attestationObject": "base64url"
+    }
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "credential_id": "credential-id"
+}
+```
+
+## Token verification
+
+Use `verifyToken` from `@cernosh/server` to validate tokens in your own routes:
+
+```typescript
+import { verifyToken } from '@cernosh/server'
+
+const result = await verifyToken(token, {
+  secret: process.env.CERNO_SECRET!,
+  sessionId: req.session.id,
+  store: config.store,
+})
+
+if (!result.valid) {
+  return res.status(403).json({ error: 'Verification required' })
+}
+```

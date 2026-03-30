@@ -1,0 +1,517 @@
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.7.0/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.7.0/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── Palette ─── */
+
+:root {
+  --sl-font: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  --sl-color-accent-low: #dbeef7;
+  --sl-color-accent: #2596be;
+  --sl-color-accent-high: #165f78;
+  --sl-color-blue-low: #dbeef7;
+  --sl-color-blue: #2596be;
+  --sl-color-blue-high: #165f78;
+
+  --sl-color-white: #201d1b;
+  --sl-color-gray-1: #554f49;
+  --sl-color-gray-2: #756d66;
+  --sl-color-gray-3: #9b928a;
+  --sl-color-gray-4: #d6d0c9;
+  --sl-color-gray-5: #e9e2da;
+  --sl-color-gray-6: #f5efe8;
+  --sl-color-gray-7: #fbf7f2;
+  --sl-color-black: #fffdf8;
+
+  --cerno-ink: #282828;
+  --cerno-warm: #ffffff;
+  --cerno-panel: rgba(255, 255, 255, 0.82);
+  --cerno-panel-strong: rgba(255, 255, 255, 0.98);
+  --cerno-border: rgba(0, 0, 0, 0.08);
+  --cerno-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  --cerno-hero-gradient: radial-gradient(circle at top left, rgba(37, 150, 190, 0.08), transparent 34%), linear-gradient(180deg, #ffffff 0%, #fbfbfa 100%);
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #123847;
+  --sl-color-accent: #38a9d2;
+  --sl-color-accent-high: #b2e7fb;
+  --sl-color-blue-low: #123847;
+  --sl-color-blue: #38a9d2;
+  --sl-color-blue-high: #b2e7fb;
+
+  --sl-color-white: #f1ece4;
+  --sl-color-gray-1: #c5beb5;
+  --sl-color-gray-2: #978f87;
+  --sl-color-gray-3: #665f59;
+  --sl-color-gray-4: #443f3a;
+  --sl-color-gray-5: #26211f;
+  --sl-color-gray-6: #181412;
+  --sl-color-gray-7: #100d0c;
+  --sl-color-black: #0d0a09;
+
+  --cerno-ink: #f3ece4;
+  --cerno-warm: #171210;
+  --cerno-panel: rgba(26, 22, 20, 0.78);
+  --cerno-panel-strong: rgba(24, 20, 18, 0.94);
+  --cerno-border: rgba(255, 245, 230, 0.1);
+  --cerno-shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+  --cerno-hero-gradient: radial-gradient(circle at top left, rgba(56, 169, 210, 0.16), transparent 30%), radial-gradient(circle at top right, rgba(251, 146, 60, 0.12), transparent 28%), linear-gradient(180deg, #130f0d 0%, #0d0a09 100%);
+}
+
+::selection {
+  background: rgba(37, 150, 190, 0.22);
+}
+
+:root,
+body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(37, 150, 190, 0.06), transparent 18%),
+    var(--sl-color-black);
+}
+
+/* Header styles now live in src/components/Header.astro */
+
+/* ─── Sidebar ─── */
+
+/* ── Mobile hamburger button ── */
+@media (max-width: 50rem) {
+  /* Restyle Starlight's floating circle into a clean, flat icon button */
+  :root starlight-menu-button button,
+  [data-theme='light'] starlight-menu-button button,
+  [data-theme='dark'] starlight-menu-button button {
+    z-index: 101 !important; /* above our header (z-index: 100) */
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border-radius: 8px !important;
+    color: var(--cerno-ink) !important;
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+    padding: 0.4rem !important;
+  }
+
+  :root starlight-menu-button button:hover,
+  :root starlight-menu-button[aria-expanded='true'] button,
+  [data-theme='light'] starlight-menu-button button:hover,
+  [data-theme='light'] starlight-menu-button[aria-expanded='true'] button {
+    background: var(--sl-color-gray-6) !important;
+    background-color: var(--sl-color-gray-6) !important;
+  }
+
+  [data-theme='dark'] starlight-menu-button button:hover,
+  [data-theme='dark'] starlight-menu-button[aria-expanded='true'] button {
+    background: var(--sl-color-gray-5) !important;
+    background-color: var(--sl-color-gray-5) !important;
+  }
+
+  /* Sidebar drawer */
+  .sidebar-pane {
+    background: var(--sl-color-black) !important;
+    border-right: 1px solid var(--cerno-border) !important;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  :root[data-theme='dark'] .sidebar-pane {
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* Sidebar nav links inside mobile drawer */
+  .sidebar-content {
+    padding: 0.75rem 1rem 1.5rem !important;
+  }
+
+  .sidebar-content a {
+    padding: 0.45em 0.65em !important;
+    border-radius: 8px !important;
+    font-size: 0.92rem !important;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .sidebar-content a:hover {
+    background: var(--sl-color-gray-6) !important;
+  }
+
+  :root[data-theme='dark'] .sidebar-content a:hover {
+    background: var(--sl-color-gray-5) !important;
+  }
+
+  /* Section labels in mobile sidebar */
+  .sidebar-content .top-level > li + li {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--cerno-border);
+  }
+
+  /* Mobile menu footer (social icons + theme selector) */
+  .mobile-preferences {
+    border-top-color: var(--cerno-border) !important;
+    padding: 0.75rem 0 !important;
+  }
+}
+
+/* Force warm palette on sidebar active — Starlight scoped styles fight back */
+:root a[aria-current='page'] {
+  background: #f5efe8 !important;
+  color: #282828 !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+}
+
+:root[data-theme='dark'] a[aria-current='page'] {
+  background: #26211f !important;
+  color: #f3ece4 !important;
+}
+
+nav.sidebar a:hover,
+.sidebar a:hover {
+  color: var(--cerno-ink);
+  background: var(--sl-color-gray-7);
+  border-radius: 8px;
+}
+
+.sidebar-content .top-level > li > details > summary {
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-2);
+}
+
+/* ─── Content area ─── */
+
+.right-sidebar-panel,
+.content-panel {
+  position: relative;
+}
+
+/* ─── Typography ─── */
+
+.sl-markdown-content > :where(h1, h2, h3) {
+  letter-spacing: -0.03em;
+}
+
+.sl-markdown-content h1 {
+  font-size: clamp(2.4rem, 4vw, 3.7rem);
+  line-height: 0.95;
+}
+
+.sl-markdown-content h2 {
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--cerno-border);
+}
+
+.sl-markdown-content h2:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.sl-markdown-content h3 {
+  margin-top: 2rem;
+}
+
+/* ─── Links ─── */
+
+.sl-markdown-content a:not([class]) {
+  color: var(--sl-color-accent);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--sl-color-accent) 35%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s;
+}
+
+.sl-markdown-content a:not([class]):hover {
+  text-decoration-color: var(--sl-color-accent);
+}
+
+/* ─── Blockquotes ─── */
+
+.sl-markdown-content blockquote {
+  border-left: 3px solid var(--sl-color-gray-4);
+  background: var(--sl-color-gray-7);
+  padding: 1rem 1.25rem;
+  border-radius: 0 12px 12px 0;
+  color: var(--sl-color-gray-1);
+  font-style: italic;
+}
+
+.sl-markdown-content blockquote p {
+  margin: 0;
+}
+
+/* ─── Asides / callouts ─── */
+
+.sl-markdown-content :where(.starlight-aside) {
+  border-radius: 12px;
+  border-left-width: 3px;
+}
+
+/* ─── Tables ─── */
+
+.sl-markdown-content table {
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+  overflow: hidden;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--cerno-panel-strong);
+  color: var(--cerno-ink);
+  border: 1px solid var(--cerno-border);
+  border-radius: 10px;
+}
+
+.sl-markdown-content table thead {
+  background: var(--sl-color-gray-7);
+}
+
+.sl-markdown-content th,
+.sl-markdown-content td {
+  padding: 0.75rem 1.1rem;
+  vertical-align: top;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-wrap: pretty;
+  color: var(--cerno-ink);
+  border-top: 1px solid var(--cerno-border);
+}
+
+/* Give edge cells breathing room from the rounded corners */
+.sl-markdown-content th:first-child,
+.sl-markdown-content td:first-child {
+  padding-left: 1.25rem;
+}
+
+.sl-markdown-content th:last-child,
+.sl-markdown-content td:last-child {
+  padding-right: 1.25rem;
+}
+
+.sl-markdown-content th {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-2);
+  border-top: 0;
+}
+
+.sl-markdown-content td:first-child {
+  font-weight: 600;
+  color: var(--cerno-ink);
+}
+
+.sl-markdown-content th:first-child {
+  font-weight: 600;
+}
+
+/* ─── Code blocks ─── */
+
+.sl-markdown-content :where(pre) {
+  border-radius: 12px;
+  border: 1px solid var(--cerno-border);
+  background: var(--sl-color-gray-7);
+}
+
+.sl-markdown-content :where(blockquote) {
+  /* blockquote radius handled above */
+}
+
+/* Inline code */
+.sl-markdown-content :not(pre) > code {
+  background: var(--sl-color-gray-6);
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  font-size: 0.88em;
+}
+
+/* ─── Pagination links ─── */
+
+.pagination-links {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--cerno-border);
+}
+
+.pagination-links a {
+  border: 1px solid var(--cerno-border);
+  border-radius: 12px;
+  background: var(--cerno-panel-strong);
+  box-shadow: var(--cerno-shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.pagination-links a:hover {
+  border-color: var(--sl-color-gray-4);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+/* ─── Cards ─── */
+
+.card,
+.site-search dialog {
+  border: 1px solid var(--cerno-border);
+  box-shadow: var(--cerno-shadow);
+}
+
+/* ─── Right sidebar TOC ─── */
+
+.right-sidebar-panel {
+  padding: 1rem 0.9rem;
+}
+
+.right-sidebar-panel .sl-container {
+  width: min(16rem, calc(100vw - 2rem));
+  padding: 0.9rem 0.95rem 1rem;
+  border-radius: 12px;
+  background: var(--cerno-panel-strong);
+  border: 1px solid var(--cerno-border);
+  box-shadow: var(--cerno-shadow);
+}
+
+.right-sidebar-panel h2 {
+  margin-bottom: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+.right-sidebar-panel ul {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.right-sidebar-panel :where(a) {
+  font-size: 0.88rem;
+  line-height: 1.28;
+  color: var(--sl-color-gray-2);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  transition: color 0.12s;
+}
+
+.right-sidebar-panel :where(a:hover) {
+  color: var(--cerno-ink);
+}
+
+.right-sidebar-panel :where(a[aria-current='true']) {
+  color: var(--cerno-ink);
+  font-weight: 600;
+}
+
+/* ─── Breadcrumbs ─── */
+
+.breadcrumbs {
+  font-size: 0.82rem;
+  color: var(--sl-color-gray-3);
+}
+
+.breadcrumbs a {
+  color: var(--sl-color-gray-2);
+}
+
+.breadcrumbs a:hover {
+  color: var(--cerno-ink);
+}
+
+/* Override Starlight's default accent blue globally */
+:root {
+  --sl-color-text-accent: var(--sl-color-accent);
+}
+
+/* ─── Mobile TOC ─── */
+
+mobile-starlight-toc .toggle {
+  border-radius: 12px;
+  padding-inline-start: 0.85rem;
+}
+
+mobile-starlight-toc .dropdown {
+  margin-top: 0.4rem;
+  border: 1px solid var(--cerno-border);
+  border-radius: 12px;
+  padding: 0.55rem 0.8rem 0.75rem;
+  background: var(--cerno-panel-strong);
+  box-shadow: var(--cerno-shadow);
+}
+
+mobile-starlight-toc .dropdown ul {
+  display: grid;
+  gap: 0.4rem;
+}
+
+mobile-starlight-toc .dropdown a {
+  border-top: 0 !important;
+  padding: 0.15rem 0 !important;
+  font-size: 0.94rem !important;
+  line-height: 1.32;
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+  text-wrap: pretty;
+}
+
+mobile-starlight-toc .dropdown a[aria-current='true'] {
+  color: var(--cerno-ink) !important;
+  font-weight: 600;
+}
+
+/* ─── Responsive ─── */
+
+@media (max-width: 50rem) {
+  .cerno-stat-row {
+    grid-template-columns: 1fr;
+  }
+
+  .cerno-hero,
+  .hero {
+    padding: 1.15rem;
+    border-radius: 24px;
+  }
+
+  .sl-markdown-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sl-markdown-content th,
+  .sl-markdown-content td {
+    padding: 0.58rem 0.72rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (min-width: 72rem) {
+  [data-has-sidebar][data-has-toc] .main-pane {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  [data-has-sidebar][data-has-toc] .content-panel .sl-container {
+    max-width: 43rem;
+    margin-inline: clamp(1.4rem, 3vw, 2.4rem) auto;
+  }
+
+  .right-sidebar {
+    padding-top: calc(var(--sl-nav-height) + 0.8rem);
+  }
+}

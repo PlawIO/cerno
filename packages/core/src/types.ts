@@ -9,6 +9,7 @@ export interface RawEvent {
   y: number
   type: 'move' | 'down' | 'up' | 'keydown' | 'keyup'
   key?: string
+  pointer_type?: PointerType
 }
 
 // ── Maze types ──
@@ -60,6 +61,8 @@ export interface BehavioralFeatures {
   movement_onset_ms: number
   jerk_std: number
   angular_velocity_entropy: number
+  /** Coefficient of variation of inter-event time intervals */
+  timing_cv: number
   sample_count: number
   total_duration_ms: number
 }
@@ -81,6 +84,7 @@ export interface MazeProfile {
 
 export interface Challenge {
   id: string
+  challenge_type: ChallengeType
   maze_seed: number
   maze_width: number
   maze_height: number
@@ -90,26 +94,167 @@ export interface Challenge {
   site_key: string
   created_at: number
   expires_at: number
+  /** SHA-256 hash of the public key bound at issuance */
+  public_key_hash?: string
+  /** Server-controlled cell size for coordinate renormalization */
+  cell_size?: number
+  /** Hash of the server-derived rate-limit binding used at issuance */
+  rate_limit_binding_hash?: string
+  /** Server-authored requirements the client must satisfy at verify time */
+  requirements?: ChallengeRequirements
+  /** Server-authored WebAuthn request options for this challenge. */
+  webauthn_request_options?: WebAuthnRequestOptionsJSON
+  /** Stroop probes injected into the maze (Phase 3) */
+  probes?: StroopProbe[]
+  /** Scoring config version pinned at issuance (for safe rotation) */
+  scoring_version?: string
 }
 
 export interface ValidationRequest {
   challenge_id: string
   site_key: string
   session_id: string
-  maze_seed: number
   events: RawEvent[]
   pow_proof: { nonce: number; hash: string }
   public_key: string
+  /** ECDSA P-256 signature of the challenge_id, base64-encoded */
+  signature?: string
   timestamp: number
-  /** Canvas cell size used by the client (defaults to RENDERING.CELL_SIZE) */
-  cell_size?: number
+  /** Deployer-provided stable user identifier for cross-session reputation.
+   *  MUST be a server-authenticated identity (e.g., hashed session cookie, user ID).
+   *  If provided directly from the browser without server validation, an attacker
+   *  can generate arbitrary stable_ids to defeat the reputation system. */
+  stable_id?: string
+  /** Server-derived rate-limit binding; must not come directly from the browser. */
+  rate_limit_binding?: string
+  /** Signed server-issued completion tokens for armed probes. */
+  probe_completion_tokens?: string[]
+  /** Optional WebAuthn assertion for this challenge. */
+  webauthn?: WebAuthnAuthenticationResponseJSON
 }
 
 export interface ValidationResult {
   success: boolean
   token?: string
-  score: number
   error_code?: string
+}
+
+// ── Input mode ──
+
+export type InputMode = 'mouse' | 'touch' | 'keyboard'
+
+export type PointerType = 'mouse' | 'touch' | 'pen'
+export type WebAuthnMode = 'off' | 'preferred' | 'required'
+
+export interface ClientCapabilities {
+  reduced_motion?: boolean
+  webauthn_available?: boolean
+  pointer_types?: PointerType[]
+}
+
+export interface ChallengeRequirements {
+  probe: {
+    mode: 'off' | 'required'
+    required_completion_count: number
+  }
+  webauthn: {
+    mode: WebAuthnMode
+  }
+}
+
+// ── Stroop cognitive probes (Phase 3) ──
+
+export interface StroopProbe {
+  id: string
+  type: 'color_tap'
+  /** Human-readable instruction, e.g. "Tap the blue cell" */
+  instruction: string
+  target_color: string
+  distractor_colors: string[]
+  /** Colored cells shown to the user. Exactly one has isTarget=true. */
+  cells: Array<{ x: number; y: number; color: string; isTarget: boolean }>
+  /** When the user's cursor reaches this cell, the probe fires */
+  trigger_cell: Point
+}
+
+export interface ProbeResponse {
+  probe_id: string
+  tapped_cell: Point
+  reaction_time_ms: number
+  /** Client-side correctness hint for analytics; server recomputes correctness and does not trust this field. */
+  correct?: boolean
+}
+
+// ── Challenge types (Phase 3) ──
+
+export type ChallengeType = 'maze' | 'maze_stroop'
+
+// ── WebAuthn attestation (Phase 3) ──
+
+export interface WebAuthnCredentialDescriptorJSON {
+  id: string
+  type: 'public-key'
+  transports?: string[]
+}
+
+export interface WebAuthnRequestOptionsJSON {
+  challenge: string
+  rpId: string
+  timeout?: number
+  userVerification?: 'required' | 'preferred' | 'discouraged'
+  allowCredentials?: WebAuthnCredentialDescriptorJSON[]
+}
+
+export interface WebAuthnRegistrationOptionsJSON {
+  challenge: string
+  rp: {
+    id: string
+    name: string
+  }
+  user: {
+    id: string
+    name: string
+    displayName: string
+  }
+  pubKeyCredParams: Array<{
+    alg: number
+    type: 'public-key'
+  }>
+  timeout?: number
+  attestation?: 'none' | 'direct' | 'enterprise' | 'indirect'
+  authenticatorSelection?: {
+    residentKey?: 'required' | 'preferred' | 'discouraged'
+    userVerification?: 'required' | 'preferred' | 'discouraged'
+    authenticatorAttachment?: 'platform' | 'cross-platform'
+  }
+  excludeCredentials?: WebAuthnCredentialDescriptorJSON[]
+}
+
+export interface WebAuthnAuthenticationResponseJSON {
+  id: string
+  rawId: string
+  response: {
+    clientDataJSON: string
+    authenticatorData: string
+    signature: string
+    userHandle?: string | null
+  }
+  type: 'public-key'
+  authenticatorAttachment?: 'platform' | 'cross-platform' | null
+  clientExtensionResults?: Record<string, unknown>
+}
+
+export interface WebAuthnRegistrationResponseJSON {
+  id: string
+  rawId: string
+  response: {
+    clientDataJSON: string
+    attestationObject: string
+    transports?: string[]
+  }
+  type: 'public-key'
+  authenticatorAttachment?: 'platform' | 'cross-platform' | null
+  clientExtensionResults?: Record<string, unknown>
 }
 
 // ── Error codes ──
@@ -122,6 +267,10 @@ export const ErrorCode = {
   BEHAVIORAL_REJECTED: 'behavioral_rejected',
   RATE_LIMITED: 'rate_limited',
   INVALID_REQUEST: 'invalid_request',
+  INVALID_SIGNATURE: 'invalid_signature',
+  PUBLIC_KEY_MISMATCH: 'public_key_mismatch',
+  PROBE_FAILED: 'probe_failed',
+  WEBAUTHN_FAILED: 'webauthn_failed',
 } as const
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]

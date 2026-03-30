@@ -1,14 +1,10 @@
-import type { BehavioralFeatures, MazeProfile } from '@cernosh/core'
-
-interface FeatureBaseline {
-  mean: number
-  std: number
-  weight: number
-}
+import type { BehavioralFeatures, InputMode, MazeProfile } from '@cernosh/core'
+import type { ScoringConfig, FeatureBaseline } from './types.js'
+import { GAUSSIAN_K, EXTREME_OUTLIER_Z, ANOMALY_PENALTY_PER, MIN_SAMPLE_COUNT, MIN_DURATION_MS, PATH_EFFICIENCY_MEAN_RATIO, PATH_EFFICIENCY_STD_RATIO, PAUSE_PER_DECISION_POINT, PAUSE_COUNT_MIN_MEAN, PAUSE_STD_PER_DECISION_POINT, PAUSE_COUNT_MIN_STD, ANGULAR_ENTROPY_BASE, ANGULAR_ENTROPY_PER_TURN, ANGULAR_ENTROPY_MAX } from './scoring-constants.js'
 
 type FeatureKey = keyof Pick<
   BehavioralFeatures,
-  'velocity_std' | 'path_efficiency' | 'pause_count' | 'movement_onset_ms' | 'jerk_std' | 'angular_velocity_entropy'
+  'velocity_std' | 'path_efficiency' | 'pause_count' | 'movement_onset_ms' | 'jerk_std' | 'angular_velocity_entropy' | 'timing_cv'
 >
 
 /**
@@ -20,12 +16,72 @@ type FeatureKey = keyof Pick<
  * move in discrete cell-to-cell bursts with pauses between, producing
  * velocity_std ~0.0003-0.0005 and very small jerk_std.
  */
-const MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
-  'velocity_std' | 'movement_onset_ms' | 'jerk_std'
+const MOUSE_MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
+  'velocity_std' | 'movement_onset_ms' | 'jerk_std' | 'timing_cv'
 > = {
   velocity_std:      { mean: 0.0004, std: 0.0003,  weight: 1.0 },
-  movement_onset_ms: { mean: 800,    std: 400,     weight: 0.6 },
+  movement_onset_ms: { mean: 1200,   std: 600,     weight: 0.6 },
   jerk_std:          { mean: 5e-7,   std: 5e-7,    weight: 1.0 },
+  // Human inter-event timing follows log-normal (CV ~0.3-0.7).
+  // Constant-speed bots produce CV ~0; uniform-random bots ~0.577.
+  timing_cv:         { mean: 0.5,    std: 0.2,     weight: 1.0 },
+}
+
+/**
+ * Touch-specific motor baselines (Phase 2).
+ *
+ * Touch input has fundamentally different kinematics than mouse:
+ * - Higher velocity variance (finger is less precise than mouse)
+ * - Shorter movement onset (direct touch vs. indirect cursor)
+ * - More jerk (finger lifts/drops vs. continuous cursor motion)
+ * - Higher timing CV (touch events fire at screen refresh rate, not pointer poll rate)
+ */
+const TOUCH_MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
+  'velocity_std' | 'movement_onset_ms' | 'jerk_std' | 'timing_cv'
+> = {
+  velocity_std:      { mean: 0.0006, std: 0.0004,  weight: 1.0 },
+  movement_onset_ms: { mean: 500,    std: 300,     weight: 0.6 },
+  jerk_std:          { mean: 8e-7,   std: 6e-7,    weight: 1.0 },
+  timing_cv:         { mean: 0.6,    std: 0.25,    weight: 1.0 },
+}
+
+/**
+ * Keyboard baselines. Arrow-key navigation produces discrete,
+ * cell-to-cell jumps with consistent timing between key presses.
+ */
+const KEYBOARD_MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
+  'velocity_std' | 'movement_onset_ms' | 'jerk_std' | 'timing_cv'
+> = {
+  velocity_std:      { mean: 0.001,  std: 0.0008,  weight: 0.6 },
+  movement_onset_ms: { mean: 600,    std: 300,     weight: 0.6 },
+  jerk_std:          { mean: 1e-6,   std: 1e-6,    weight: 0.6 },
+  timing_cv:         { mean: 0.4,    std: 0.2,     weight: 1.0 },
+}
+
+function getMotorBaselines(inputType?: InputMode, scoringConfig?: ScoringConfig) {
+  let base: Record<string, FeatureBaseline>
+  let configKey: 'mouse' | 'touch' | 'keyboard'
+  switch (inputType) {
+    case 'touch':
+      base = { ...TOUCH_MOTOR_BASELINES }
+      configKey = 'touch'
+      break
+    case 'keyboard':
+      base = { ...KEYBOARD_MOTOR_BASELINES }
+      configKey = 'keyboard'
+      break
+    default:
+      base = { ...MOUSE_MOTOR_BASELINES }
+      configKey = 'mouse'
+      break
+  }
+  const overrides = scoringConfig?.motorBaselines?.[configKey]
+  if (overrides) {
+    for (const [key, val] of Object.entries(overrides)) {
+      if (val) base[key] = val
+    }
+  }
+  return base as Record<FeatureKey, FeatureBaseline>
 }
 
 /**
@@ -34,10 +90,11 @@ const MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
  * interaction but better than nothing.
  */
 const FALLBACK_BASELINES: Record<FeatureKey, FeatureBaseline> = {
-  ...MOTOR_BASELINES,
+  ...MOUSE_MOTOR_BASELINES,
   path_efficiency:          { mean: 0.35, std: 0.08, weight: 1.0 },
-  pause_count:              { mean: 3.0,  std: 1.5,  weight: 0.8 },
-  angular_velocity_entropy: { mean: 3.5,  std: 0.5,  weight: 1.5 },
+  pause_count:              { mean: 5.0,  std: 2.5,  weight: 0.8 },
+  angular_velocity_entropy: { mean: 1.5,  std: 0.5,  weight: 1.5 },
+  // timing_cv inherited from MOTOR_BASELINES (maze-independent feature)
 }
 
 /**
@@ -46,29 +103,27 @@ const FALLBACK_BASELINES: Record<FeatureKey, FeatureBaseline> = {
  * a human moving freely. The BFS solution, decision points, and
  * turn count tell us what to expect.
  */
-function computeBaselines(profile?: MazeProfile): Record<FeatureKey, FeatureBaseline> {
-  if (!profile) return FALLBACK_BASELINES
+function computeBaselines(profile?: MazeProfile, inputType?: InputMode, scoringConfig?: ScoringConfig): Record<FeatureKey, FeatureBaseline> {
+  const motorBaselines = getMotorBaselines(inputType, scoringConfig)
+  if (!profile) {
+    return { ...FALLBACK_BASELINES, ...motorBaselines }
+  }
 
+  const mr = scoringConfig?.mazeRelative
   return {
-    ...MOTOR_BASELINES,
+    ...motorBaselines,
     path_efficiency: {
-      // Humans trace ~85-95% as efficiently as the BFS optimal path.
-      // Micro-corrections, slight overshoots, and exploring dead ends reduce efficiency.
-      mean: profile.optimalEfficiency * 0.9,
-      std: profile.optimalEfficiency * 0.15,
+      mean: profile.optimalEfficiency * (mr?.pathEfficiencyMeanRatio ?? PATH_EFFICIENCY_MEAN_RATIO),
+      std: profile.optimalEfficiency * (mr?.pathEfficiencyStdRatio ?? PATH_EFFICIENCY_STD_RATIO),
       weight: 1.0,
     },
     pause_count: {
-      // Humans hesitate at ~60% of decision points (forks in the maze).
-      // More forks = more expected pauses.
-      mean: Math.max(profile.decisionPointCount * 0.6, 1),
-      std: Math.max(profile.decisionPointCount * 0.3, 0.5),
+      mean: Math.max(profile.decisionPointCount * (mr?.pausePerDecisionPoint ?? PAUSE_PER_DECISION_POINT), PAUSE_COUNT_MIN_MEAN),
+      std: Math.max(profile.decisionPointCount * PAUSE_STD_PER_DECISION_POINT, PAUSE_COUNT_MIN_STD),
       weight: 0.8,
     },
     angular_velocity_entropy: {
-      // More turns in the solution = more direction changes = higher entropy.
-      // Capped at 4.0 bits (max for 16-bin Shannon entropy).
-      mean: Math.min(1.0 + profile.turnCount * 0.15, 4.0),
+      mean: Math.min((mr?.angularEntropyBase ?? ANGULAR_ENTROPY_BASE) + profile.turnCount * (mr?.angularEntropyPerTurn ?? ANGULAR_ENTROPY_PER_TURN), ANGULAR_ENTROPY_MAX),
       std: 0.5,
       weight: 1.5,
     },
@@ -76,6 +131,36 @@ function computeBaselines(profile?: MazeProfile): Record<FeatureKey, FeatureBase
 }
 
 const FEATURE_KEYS = Object.keys(FALLBACK_BASELINES) as FeatureKey[]
+
+/**
+ * Detect suspicious cross-feature correlations that suggest automation.
+ * Individual features may look normal, but their combination is unlikely
+ * for a human.
+ */
+function detectFeatureAnomalies(
+  features: BehavioralFeatures,
+  baselines: Record<FeatureKey, FeatureBaseline>,
+): number {
+  let anomalyCount = 0
+
+  const zOf = (key: FeatureKey): number => {
+    const b = baselines[key]
+    return b.std > 0 ? (features[key] - b.mean) / b.std : 0
+  }
+
+  // Smooth velocity (normal z) + abnormally low jerk = constant-speed bot
+  const velZ = Math.abs(zOf('velocity_std'))
+  const jerkZ = zOf('jerk_std') // negative z means below mean
+  if (velZ < 2 && jerkZ < -3) anomalyCount++
+
+  // High path efficiency + low angular entropy = straight-line bot
+  if (features.path_efficiency > 0.9 && Math.abs(zOf('angular_velocity_entropy')) < 1) anomalyCount++
+
+  // Normal timing CV + instant movement onset = pre-programmed start
+  if (Math.abs(zOf('timing_cv')) < 2 && features.movement_onset_ms < 50) anomalyCount++
+
+  return anomalyCount
+}
 
 /**
  * Deterministic behavioral scoring. No ML inference.
@@ -87,47 +172,62 @@ const FEATURE_KEYS = Object.keys(FALLBACK_BASELINES) as FeatureKey[]
  *
  * Additional penalties for low sample count or suspiciously fast completion.
  */
-export function scoreBehavior(features: BehavioralFeatures, profile?: MazeProfile): number {
-  const baselines = computeBaselines(profile)
+export function scoreBehavior(
+  features: BehavioralFeatures,
+  profile?: MazeProfile,
+  inputType?: InputMode,
+  scoringConfig?: ScoringConfig,
+): { score: number; zScores: Record<string, number> } {
+  const baselines = computeBaselines(profile, inputType, scoringConfig)
   let weightedSum = 0
   let totalWeight = 0
+  let maxZ = 0
+  const zScores: Record<string, number> = {}
+
+  const k = scoringConfig?.gaussianK ?? GAUSSIAN_K
+  const outlierZ = scoringConfig?.extremeOutlierZ ?? EXTREME_OUTLIER_Z
+  const anomalyPenalty = scoringConfig?.anomalyPenaltyPer ?? ANOMALY_PENALTY_PER
 
   for (const key of FEATURE_KEYS) {
     const baseline = baselines[key]
     const value = features[key]
 
-    // Guard against division by zero: if baseline std is 0, treat as perfect match
     const zScore = baseline.std > 0
       ? Math.abs(value - baseline.mean) / baseline.std
       : 0
 
-    // Gaussian: 1.0 = perfect match, degrades gently for normal human variance
-    // (z=2 → 0.80, z=3 → 0.61) but still penalizes extreme deviations (z=5 → 0.25)
-    const k = 3
+    zScores[key] = zScore
+
+    if (baseline.weight >= 0.5) maxZ = Math.max(maxZ, zScore)
+
     const featureScore = Math.exp(-0.5 * (zScore / k) ** 2)
 
     weightedSum += featureScore * baseline.weight
     totalWeight += baseline.weight
   }
 
-  // Guard against zero total weight (shouldn't happen with constants, but be safe)
   let score = totalWeight > 0 ? weightedSum / totalWeight : 0
 
-  // Penalty: too few data points is suspicious
-  if (features.sample_count < 20) {
-    const sampleRatio = Math.max(features.sample_count, 0) / 20
+  if (maxZ > outlierZ) {
+    score *= Math.exp(-0.5 * ((maxZ - outlierZ) / 2) ** 2)
+  }
+
+  const anomalyCount = detectFeatureAnomalies(features, baselines)
+  if (anomalyCount > 0) {
+    score *= 1 - anomalyPenalty * anomalyCount
+  }
+
+  if (features.sample_count < MIN_SAMPLE_COUNT) {
+    const sampleRatio = Math.max(features.sample_count, 0) / MIN_SAMPLE_COUNT
     score *= sampleRatio
   }
 
-  // Penalty: completing too fast is suspicious
-  if (features.total_duration_ms < 2000) {
-    const durationRatio = Math.max(features.total_duration_ms, 0) / 2000
+  if (features.total_duration_ms < MIN_DURATION_MS) {
+    const durationRatio = Math.max(features.total_duration_ms, 0) / MIN_DURATION_MS
     score *= durationRatio
   }
 
-  // NaN guard: if any feature produced NaN, reject (score 0)
-  if (Number.isNaN(score)) return 0
+  if (Number.isNaN(score)) return { score: 0, zScores }
 
-  // Clamp to [0, 1]
-  return Math.max(0, Math.min(1, score))
+  return { score: Math.max(0, Math.min(1, score)), zScores }
 }

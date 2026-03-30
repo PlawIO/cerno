@@ -1,0 +1,235 @@
+---
+title: Server SDK
+description: Challenge issuance, verification, probe timing, WebAuthn, and storage contracts.
+---
+
+The `@cernosh/server` package is the authoritative side of the system. It issues challenges,
+consumes them exactly once, verifies proof-of-work and signatures, validates maze solves from raw
+events, verifies server-timed probes and WebAuthn assertions, and mints short-lived tokens.
+
+## Installation
+
+```bash
+npm install @cernosh/server
+```
+
+For a portable production adapter:
+
+```bash
+npm install @cernosh/server @cernosh/server-redis
+```
+
+## Configuration
+
+```typescript
+import { MemoryStore } from '@cernosh/server'
+import type { ServerConfig } from '@cernosh/server'
+
+const config: ServerConfig = {
+  secret: process.env.CERNO_SECRET!,
+  store: new MemoryStore(),
+  enableSecretFeatures: true,
+  enableProbes: false,
+  webAuthn: {
+    mode: 'off',
+    rpId: 'example.com',
+    expectedOrigin: 'https://example.com',
+  },
+  mode: 'development',
+  scoreThreshold: 0.6,
+}
+```
+
+:::caution
+`MemoryStore` is for development and tests. Production deployments should use a real shared store
+that implements `CaptchaStore` with atomic challenge consume, atomic token consume, and strong
+consistency. Use Durable Objects in `apps/worker` or `@cernosh/server-redis` in Node/Bun.
+`production` mode rejects weak stores and partial WebAuthn/probe storage at startup.
+:::
+
+## API
+
+### `createChallenge(config, request)`
+
+Generates a challenge and persists it with a TTL. The returned object can include:
+
+- `challenge_type`
+- maze geometry and seed
+- proof-of-work challenge and difficulty
+- server-controlled `cell_size`
+- optional `probes`
+- `requirements`
+- `webauthn_request_options`
+
+```typescript
+const challenge = await createChallenge(config, {
+  site_key: 'your-site-key',
+  stable_id: 'user-123',
+  client_capabilities: {
+    reduced_motion: false,
+    webauthn_available: true,
+  },
+})
+```
+
+You can also pass server-derived request context for adaptive proof-of-work and rate-limit binding:
+
+```typescript
+const challenge = await createChallenge(config, {
+  site_key: 'your-site-key',
+  stable_id: 'user-123',
+  client_capabilities: {
+    reduced_motion: false,
+    webauthn_available: true,
+  },
+  client_signals: {
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    failedAttempts: 2,
+    trustScore: 0.82,
+  },
+  rate_limit_binding: 'server-derived-binding',
+})
+```
+
+### `validateSubmission(config, request)`
+
+Runs the full server pipeline:
+
+1. Input bounds check
+2. Rate limit
+3. Challenge consume
+4. Site key check
+5. Public-key binding check
+6. Expiry check
+7. PoW verification
+8. ECDSA signature verification
+9. Optional WebAuthn verification
+10. Event renormalization and maze validation
+11. Server-timed probe completion token validation
+12. Behavioral scoring
+
+```typescript
+const result = await validateSubmission(config, {
+  challenge_id: '...',
+  site_key: 'your-site-key',
+  session_id: 'user-session-id',
+  maze_seed: 12345,
+  events: [{ x: 0.1, y: 0.2, t: 1234567890, type: 'down' }],
+  pow_proof: { nonce: 12345, hash: '00ab...' },
+  public_key: 'base64-jwk',
+  signature: 'base64-signature',
+  timestamp: Date.now(),
+  stable_id: 'user-123',
+  probe_completion_tokens: ['eyJhbGciOiJIUzI1NiJ9...'],
+  webauthn: assertion,
+})
+```
+
+On success the function returns:
+
+```typescript
+{ success: true, token: 'eyJ...', score: 0 }
+```
+
+The behavioral score is intentionally not exposed in the public success path. Use `onValidation`
+for observability if you need internals.
+
+### `verifyToken(token, options)`
+
+Verifies a JWT token in your own routes. Checks signature, expiry, session binding, and single-use
+enforcement.
+
+```typescript
+const result = await verifyToken(token, {
+  secret: process.env.CERNO_SECRET!,
+  sessionId: req.session.id,
+  store: config.store,
+})
+```
+
+### `siteverify(request, options)`
+
+Provides a server-to-server verification shape similar to reCAPTCHA:
+
+```typescript
+import { siteverify } from '@cernosh/server'
+
+const result = await siteverify({
+  token,
+  session_id: req.session.id,
+}, {
+  secret: process.env.CERNO_SECRET!,
+  store: config.store,
+})
+```
+
+### Probe helpers
+
+Use these when you expose the full worker contract yourself:
+
+```typescript
+import {
+  armProbe,
+  completeProbe,
+  verifyProbeCompletionTokens,
+} from '@cernosh/server'
+```
+
+Probe timing is server-authored:
+
+- `armProbe()` validates the trace prefix and returns a signed `probe_ticket`
+- `completeProbe()` consumes the ticket and returns a signed `completion_token`
+- `validateSubmission()` accepts `probe_completion_tokens`, not raw reaction times
+
+### WebAuthn helpers
+
+```typescript
+import {
+  beginWebAuthnRegistration,
+  completeWebAuthnRegistration,
+  verifyWebAuthnAuthentication,
+} from '@cernosh/server'
+```
+
+Registration is explicit:
+
+- `beginWebAuthnRegistration()` issues browser-safe creation options
+- `completeWebAuthnRegistration()` verifies attestation and stores the credential
+- `createChallenge()` includes `webauthn_request_options` when a registered `stable_id` is present
+- `validateSubmission()` verifies the assertion when the challenge requires or prefers it
+
+## `CaptchaStore`
+
+Implement the `CaptchaStore` interface for any storage backend:
+
+```typescript
+interface CaptchaStore {
+  capabilities: {
+    atomicChallengeConsume: boolean
+    atomicTokenConsume: boolean
+    strongConsistency: boolean
+    productionReady: boolean
+  }
+  setChallenge(id: string, data: Challenge, ttlMs: number): Promise<void>
+  getChallenge(id: string): Promise<Challenge | null>
+  deleteChallenge(id: string): Promise<void>
+  consumeChallenge(id: string): Promise<Challenge | null>
+  consumeToken(tokenId: string, ttlMs: number): Promise<boolean>
+  incrementRate(key: string, windowMs: number): Promise<number>
+  setProbeArmSession?(id: string, data: ProbeArmSessionData, ttlMs: number): Promise<void>
+  consumeProbeArmSession?(id: string): Promise<ProbeArmSessionData | null>
+  setWebAuthnRegistrationSession?(id: string, data: WebAuthnRegistrationSessionData, ttlMs: number): Promise<void>
+  consumeWebAuthnRegistrationSession?(id: string): Promise<WebAuthnRegistrationSessionData | null>
+  listWebAuthnCredentials?(stableId: string, siteKey: string): Promise<WebAuthnCredentialRecord[]>
+  saveWebAuthnCredential?(credential: WebAuthnCredentialRecord): Promise<void>
+  updateWebAuthnCredentialCounter?(
+    stableId: string,
+    siteKey: string,
+    credentialId: string,
+    nextCounter: number,
+  ): Promise<void>
+  setReputation?(key: string, data: ReputationData, ttlMs: number): Promise<void>
+  getReputation?(key: string): Promise<ReputationData | null>
+}
+```

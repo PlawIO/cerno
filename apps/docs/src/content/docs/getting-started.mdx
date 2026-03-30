@@ -1,0 +1,58 @@
+---
+title: Introduction
+description: What Cerno ships today, what it verifies, and how the stack fits together.
+---
+
+Cerno is a human-verification stack for sensitive actions. The visible task is a maze. The decision
+comes from the server-side pipeline behind it: proof-of-work, path validation, behavioral scoring,
+optional Stroop probes, optional WebAuthn, and replay-resistant verification tokens.
+
+> Latin: *cerno* — "I distinguish."
+
+## The problem
+
+AI browser agents can pass image CAPTCHAs, click checkboxes, and replay deterministic flows.
+What still breaks under pressure is embodied, time-bound human behavior: how a pointer starts,
+corrects, hesitates, and reacts inside a constrained task.
+
+## How it works
+
+One visible interaction. Multiple server-verified signals.
+
+| Layer | What it does | Why it matters |
+|-------|-------------|----------------|
+| **Proof of Work** | Mines SHA-256 leading-zero bits in the background | Raises the cost of automation and challenge farming |
+| **Maze validation** | Regenerates the maze server-side from the issued seed | Prevents client-side lies about the solved path |
+| **Behavioral scoring** | Re-extracts movement features from raw events | Detects traces that look synthetic even if the maze is solved |
+| **Secret features** | Computes server-only motion metrics | Keeps part of the scoring model off the attacker’s machine |
+| **Stroop probes** | Injects a surprise color-tap task | Tests present attention, not just cursor playback |
+| **WebAuthn** | Optionally verifies platform-authenticator evidence | Adds a hardware-backed signal for higher-risk flows |
+
+## Packages
+
+| Package | What you get |
+|---------|--------------|
+| [`@cernosh/core`](https://www.npmjs.com/package/@cernosh/core) | Shared types, maze generation/validation utilities, render config, feature extraction |
+| [`@cernosh/react`](https://www.npmjs.com/package/@cernosh/react) | Drop-in widget, PoW worker fallback, ephemeral key binding, Stroop overlay |
+| [`@cernosh/server`](https://www.npmjs.com/package/@cernosh/server) | Challenge issuance, validation pipeline, token verification, siteverify, reputation helpers |
+
+## Two deployment shapes
+
+- **In-process:** Use `@cernosh/server` inside your own API routes. This is the simplest path if
+  your app already has an application server.
+- **Edge API:** Deploy `apps/worker` to Cloudflare Workers and point the React component at that
+  base URL. This gives you a standalone verification service with Durable Objects for authoritative
+  state and a KV fallback for demos.
+
+## What is public vs. private
+
+The client can see the maze, raw events, and public feature extraction code. It cannot
+authoritatively decide whether a solve is valid. Final judgment always happens server-side from
+the issued challenge, server-controlled cell size, server-side event renormalization, and
+server-only scoring layers.
+
+## Read next
+
+- Start with [Quick Start](/docs/quick-start/) if you want the shortest path to a working integration.
+- Read [Challenge API](/docs/reference/api/) for the exact request and response shapes.
+- Read [Cloudflare Workers](/docs/guides/cloudflare-workers/) if you want a deployable edge service from this repo.

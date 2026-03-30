@@ -3,4 +3,9 @@ dist/
 *.tsbuildinfo
 .env
 .env.*
+.dev.vars
 .gstack/
+.gstack-audit/
+.claude/
+.astro/
+test-results/

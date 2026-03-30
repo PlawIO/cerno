@@ -1,1159 +1,1476 @@
 ---
-// Cerno — cerno.sh
-// Zero JS. Pure Astro + scoped CSS.
+// cerno.sh
+const enableReactGrab = import.meta.env.DEV
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cerno — The last line between AI agents and your users</title>
-    <meta
-      name="description"
-      content="Maze-trace CAPTCHA with behavioral biometrics. Invisible to humans. Impenetrable to agents."
-    />
-    <meta property="og:title" content="Cerno — AI-agent-proof CAPTCHA" />
-    <meta
-      property="og:description"
-      content="Maze-trace CAPTCHA with behavioral biometrics. Invisible to humans. Impenetrable to agents."
-    />
+    <title>Cerno — Human verification without hardware</title>
+    <meta name="description" content="Open-source TypeScript SDK for human verification. Maze interaction with motor-control analysis, 12 behavioral features scored server-side against per-maze baselines. No ML inference, no third-party calls." />
+    <link rel="canonical" href="https://cerno.sh" />
+    <meta property="og:title" content="Cerno — Human verification without hardware" />
+    <meta property="og:description" content="Open-source verification SDK. Maze interaction, motor-control analysis, server-side behavioral scoring. No ML inference." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://cerno.sh" />
+    <meta property="og:image" content="https://cerno.sh/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Cerno — Human verification without hardware" />
+    <meta name="twitter:description" content="Open-source verification SDK. Maze interaction, motor-control analysis, server-side behavioral scoring." />
+    <meta name="twitter:image" content="https://cerno.sh/og.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <script is:inline>
+      // Anti-FOUC: resolve theme before paint. Syncs with Starlight's localStorage key.
+      (function(){
+        var s = localStorage.getItem('starlight-theme');
+        var dark = s === 'dark' || (!s && matchMedia('(prefers-color-scheme:dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      })();
+    </script>
+    {enableReactGrab && (
+      <>
+        <script src="//unpkg.com/react-grab/dist/index.global.js" crossorigin="anonymous"></script>
+        <script src="//unpkg.com/@react-grab/claude-code/dist/client.global.js" crossorigin="anonymous"></script>
+      </>
+    )}
+    <style>
+      @font-face {
+        font-family: 'Geist';
+        src: url('https://cdn.jsdelivr.net/npm/geist@1.7.0/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Geist Mono';
+        src: url('https://cdn.jsdelivr.net/npm/geist@1.7.0/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
   </head>
   <body>
-    <!-- ═══════════════ NAV ═══════════════ -->
-    <nav class="nav">
+    <nav>
       <div class="nav-inner">
-        <a href="/" class="nav-logo">cerno</a>
-        <div class="nav-links">
-          <a href="#how-it-works">How it works</a>
-          <a href="#integration">Integrate</a>
-          <a href="https://github.com/veto-party/cerno" class="nav-gh">GitHub</a>
+        <a href="/" class="logo">
+          <svg class="logo-mark" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="13" y1="3" x2="33" y2="3"/>
+              <line x1="33" y1="3" x2="33" y2="33"/>
+              <line x1="3" y1="33" x2="23" y2="33"/>
+              <line x1="3" y1="3" x2="3" y2="33"/>
+              <line x1="13" y1="13" x2="13" y2="23"/>
+              <line x1="23" y1="3" x2="23" y2="13"/>
+              <line x1="23" y1="23" x2="23" y2="33"/>
+              <line x1="13" y1="23" x2="23" y2="23"/>
+            </g>
+            <path d="M8 3 L8 8 L18 8 L18 18 L28 18 L28 28 L28 33" stroke="#2596be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Cerno
+        </a>
+        <div class="nav-r">
+          <a href="/docs/">Docs</a>
+          <a href="https://github.com/PlawIO/cerno" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </button>
         </div>
       </div>
     </nav>
 
-    <!-- ═══════════════ HERO ═══════════════ -->
-    <section class="hero">
-      <div class="maze-bg" aria-hidden="true">
-        <div class="maze-grid">
-          {Array.from({ length: 180 }).map((_, i) => (
-            <div class="maze-cell" style={`--d:${(i * 37) % 60}; --r:${i % 4}`} />
-          ))}
-        </div>
-      </div>
-      <div class="hero-content">
-        <h1 class="wordmark">Cerno</h1>
-        <p class="tagline">The last line between AI&nbsp;agents and your&nbsp;users.</p>
-        <p class="sub-tagline">
-          Maze-trace CAPTCHA with behavioral biometrics.<br />
-          Invisible to humans. Impenetrable to agents.
-        </p>
-        <div class="cta-row">
-          <a href="#integration" class="btn btn-primary">Get Started</a>
-          <a
-            href="https://github.com/veto-party/cerno"
-            class="btn btn-secondary"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <svg
-              class="gh-icon"
-              viewBox="0 0 16 16"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" />
-            </svg>
-            View on GitHub
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════ PROBLEM ═══════════════ -->
-    <section class="section problem">
-      <div class="container">
-        <h2 class="section-heading">
-          AI agents are getting smarter.<br />
-          <span class="text-muted">Your CAPTCHA isn't.</span>
-        </h2>
-        <div class="stats-grid">
-          <div class="stat-card">
-            <span class="stat-number">60%</span>
-            <span class="stat-label">of reCAPTCHA v2 solved by Claude</span>
-            <span class="stat-source">Roundtable benchmark, 2024</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-number">90%+</span>
-            <span class="stat-label">solve rate from CAPTCHA bypass services</span>
-            <span class="stat-source">Industry data</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-number">2025</span>
-            <span class="stat-label">AI agents use browsers like humans</span>
-            <span class="stat-source">browser-use, Playwright, Stagehand</span>
-          </div>
-        </div>
-        <p class="problem-explanation">
-          Traditional CAPTCHAs test what you <em>know</em>&thinsp;&mdash;&thinsp;identify a bus, read distorted text.
-          AI can do that now. Cerno tests how you <em>move</em>.
-        </p>
-      </div>
-    </section>
-
-    <!-- ═══════════════ HOW IT WORKS ═══════════════ -->
-    <section class="section how" id="how-it-works">
-      <div class="container">
-        <span class="section-label">How it works</span>
-        <h2 class="section-heading">Three layers. Zero trust.</h2>
-        <div class="layers-grid">
-          <div class="layer-card">
-            <div class="layer-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="7" width="20" height="14" rx="2" />
-                <path d="M12 11v4M9 13h6" />
-                <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" />
-              </svg>
+    <main>
+      <section class="hero">
+        <div class="hero-center">
+          <h1>Human verification<br/>without hardware</h1>
+          <p class="sub">
+            Motor-control analysis of maze interaction.<span class="hide-mobile"> Open-source TypeScript SDK.</span><span class="show-mobile"> Open source.</span>
+          </p>
+          <div class="hero-actions">
+            <div class="install-line">
+              <code><button class="pm-switch" id="pm-switch" aria-label="Switch package manager">npm i</button> @cernosh/react @cernosh/server</code>
+              <button class="copy-btn" id="pkg-copy" aria-label="Copy">
+                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
             </div>
-            <h3>Proof of Work</h3>
-            <p class="layer-subtitle">Economics layer</p>
-            <p>
-              SHA-256 mining runs in the background. Imperceptible to a single user.
-              Makes farm attacks economically infeasible at scale.
-            </p>
-          </div>
-          <div class="layer-card">
-            <div class="layer-icon accent-cyan">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M3 9h18M9 3v18M15 9v6M9 15h6" />
-              </svg>
+            <div class="ctas">
+              <a href="/docs/getting-started/" class="btn-accent">Read Docs</a>
+              <a href="https://github.com/PlawIO/cerno" class="btn-outline" target="_blank" rel="noopener">GitHub &rarr;</a>
             </div>
-            <h3>Maze Challenge</h3>
-            <p class="layer-subtitle">Spatial reasoning</p>
-            <p>
-              A unique procedural maze generated per session. AI agents struggle to
-              navigate spatial layouts through vision alone. Humans trace the path
-              intuitively.
-            </p>
-          </div>
-          <div class="layer-card">
-            <div class="layer-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12c0 0 4-8 10-8s10 8 10 8-4 8-10 8S2 12 2 12z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </div>
-            <h3>Behavioral Biometrics</h3>
-            <p class="layer-subtitle">The real test</p>
-            <p>
-              6 features extracted from your mouse movements. Velocity variance. Jerk
-              dynamics. Angular entropy. Pause-move ratios. Things AI can't fake.
-            </p>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ═══════════════ CODE / INTEGRATION ═══════════════ -->
-    <section class="section code-section" id="integration">
-      <div class="container">
-        <span class="section-label">Integration</span>
-        <h2 class="section-heading">Ship in minutes, not&nbsp;sprints.</h2>
+      <section class="demo">
+        <p class="section-label">DEMO</p>
+        <div class="demo-grid">
+          <div class="maze-wrap">
+            <canvas id="maze-canvas"></canvas>
+            <button id="new-maze" class="new-maze">New maze</button>
+          </div>
+          <div class="score-panel" id="score-panel">
+            <div class="score-features">
+              <div class="score-row"><code>velocity_std</code><div class="bar"><div class="bar-fill" data-feat="velocity_std"></div></div><span class="val" data-val="velocity_std">&mdash;</span></div>
+              <div class="score-row"><code>path_efficiency</code><div class="bar"><div class="bar-fill" data-feat="path_efficiency"></div></div><span class="val" data-val="path_efficiency">&mdash;</span></div>
+              <div class="score-row"><code>pause_count</code><div class="bar"><div class="bar-fill" data-feat="pause_count"></div></div><span class="val" data-val="pause_count">&mdash;</span></div>
+              <div class="score-row"><code>movement_onset_ms</code><div class="bar"><div class="bar-fill" data-feat="movement_onset_ms"></div></div><span class="val" data-val="movement_onset_ms">&mdash;</span></div>
+              <div class="score-row"><code>jerk_std</code><div class="bar"><div class="bar-fill" data-feat="jerk_std"></div></div><span class="val" data-val="jerk_std">&mdash;</span></div>
+              <div class="score-row"><code>angular_velocity_entropy</code><div class="bar"><div class="bar-fill" data-feat="angular_velocity_entropy"></div></div><span class="val" data-val="angular_velocity_entropy">&mdash;</span></div>
+              <div class="score-row"><code>timing_cv</code><div class="bar"><div class="bar-fill" data-feat="timing_cv"></div></div><span class="val" data-val="timing_cv">&mdash;</span></div>
+            </div>
+            <div class="score-total">
+              <span class="score-label">Score</span>
+              <span class="score-value" id="score-value">&mdash;</span>
+            </div>
+            <p class="score-hint" id="score-hint">Trace from green to red</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="layers">
+        <p class="section-label">PIPELINE</p>
+
+        <div class="layer">
+          <span class="num">01</span>
+          <div>
+            <strong>Proof of work</strong>
+            <span class="desc">SHA-256 hash prefix, 14&ndash;24 bits. Adaptive difficulty based on client signals.</span>
+          </div>
+        </div>
+
+        <div class="layer">
+          <span class="num">02</span>
+          <div>
+            <strong>Maze generation</strong>
+            <span class="desc">Growing Tree algorithm, seeded PRNG. Server regenerates from seed for trustless validation.</span>
+          </div>
+        </div>
+
+        <div class="layer">
+          <span class="num">03</span>
+          <div>
+            <strong>Motor-control analysis</strong>
+            <span class="desc">12 behavioral features (7 public + 5 secret, server-only) extracted from raw pointer events. Scored against per-maze baselines.</span>
+          </div>
+        </div>
+
+        <div class="layer">
+          <span class="num">04</span>
+          <div>
+            <strong>Stroop probes</strong>
+            <span class="desc">Color-word interference at maze decision points. Server derives timing from event stream.</span>
+          </div>
+        </div>
+
+        <div class="layer">
+          <span class="num">05</span>
+          <div>
+            <strong>Signature binding</strong>
+            <span class="desc">ECDSA P-256 ephemeral keypair. Public key bound at challenge issuance, verified on submission.</span>
+          </div>
+        </div>
+
+        <div class="layer">
+          <span class="num">06</span>
+          <div>
+            <strong>Reputation</strong>
+            <span class="desc">Behavioral consistency across sessions. EMA trust scores keyed by stable device identifier.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="features">
+        <p class="section-label">FEATURES EXTRACTED</p>
+        <div class="feat-grid">
+          <div class="feat"><code>velocity_std</code><span>Standard deviation of tangential velocity across 60Hz resampled trajectory.</span></div>
+          <div class="feat"><code>path_efficiency</code><span>Euclidean start-to-exit distance divided by actual path length.</span></div>
+          <div class="feat"><code>pause_count</code><span>Intervals where velocity &lt; 0.0005 for &ge; 100ms. Correlated with maze decision points.</span></div>
+          <div class="feat"><code>movement_onset_ms</code><span>Time from first event to first significant movement above threshold.</span></div>
+          <div class="feat"><code>jerk_std</code><span>Standard deviation of the third derivative of position.</span></div>
+          <div class="feat"><code>angular_velocity_entropy</code><span>Shannon entropy of direction changes across 16 angular bins.</span></div>
+          <div class="feat"><code>timing_cv</code><span>Coefficient of variation of raw inter-event intervals. Computed pre-resampling.</span></div>
+        </div>
+      </section>
+
+      <section class="code-section">
+        <p class="section-label">INTEGRATION</p>
         <div class="code-grid">
-          <div class="code-block">
-            <div class="code-header">
-              <span class="code-dot red"></span>
-              <span class="code-dot yellow"></span>
-              <span class="code-dot green"></span>
-              <span class="code-filename">ProtectedForm.tsx</span>
-            </div>
-            <pre><code><span class="kw">import</span> {"{"} <span class="fn">Cerno</span> {"}"} <span class="kw">from</span> <span class="str">'@cernosh/react'</span>
+          <div class="block">
+            <div class="block-h"><span>ProtectedForm.tsx</span><button class="copy-btn" data-copy-from="code-client" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+            <pre><code id="code-client"><span class="kw">import</span> {"{"} <span class="lit">Cerno</span> {"}"} <span class="kw">from</span> <span class="str">'@cernosh/react'</span>
 
 <span class="kw">function</span> <span class="fn">ProtectedForm</span>() {"{"}
   <span class="kw">return</span> (
-    &lt;<span class="fn">Cerno</span>
-      <span class="attr">siteKey</span>=<span class="str">"your-site-key"</span>
-      <span class="attr">sessionId</span>={"{"}session.id{"}"}
-      <span class="attr">onVerify</span>={"{"}(<span class="param">token</span>) =&gt; <span class="fn">submitForm</span>(token){"}"}
+    &lt;<span class="lit">Cerno</span>
+      <span class="prop">siteKey</span>=<span class="str">"your-site-key"</span>
+      <span class="prop">sessionId</span>={"{"}session.id{"}"}
+      <span class="prop">onVerify</span>={"{"}(token) =&gt; <span class="fn">submit</span>(token){"}"}
     /&gt;
   )
 {"}"}</code></pre>
           </div>
-          <div class="code-block">
-            <div class="code-header">
-              <span class="code-dot red"></span>
-              <span class="code-dot yellow"></span>
-              <span class="code-dot green"></span>
-              <span class="code-filename">verify.ts</span>
-            </div>
-            <pre><code><span class="kw">import</span> {"{"} <span class="fn">verifyToken</span> {"}"} <span class="kw">from</span> <span class="str">'@cernosh/server'</span>
+          <div class="block">
+            <div class="block-h"><span>verify.ts</span><button class="copy-btn" data-copy-from="code-server" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+            <pre><code id="code-server"><span class="kw">import</span> {"{"} <span class="lit">verifyToken</span> {"}"} <span class="kw">from</span> <span class="str">'@cernosh/server'</span>
 
 <span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">verifyToken</span>(token, {"{"}
-  <span class="attr">secret</span>: process.env.<span class="const">CERNO_SECRET</span>,
-  <span class="attr">sessionId</span>: req.session.id,
+  <span class="prop">secret</span>: process.env.<span class="lit">CERNO_SECRET</span>,
+  <span class="prop">sessionId</span>: req.session.id,
 {"}"})
 
-<span class="cmt">// result: {"{"} valid: boolean, score: number {"}"}</span></code></pre>
+<span class="cm">// {"{"} valid: boolean {"}"}</span></code></pre>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </main>
 
-    <!-- ═══════════════ ARCHITECTURE ═══════════════ -->
-    <section class="section architecture">
-      <div class="container">
-        <span class="section-label">Architecture</span>
-        <h2 class="section-heading">Three gates. One verdict.</h2>
-        <div class="pipeline">
-          <div class="pipeline-step">
-            <div class="pipeline-node">
-              <span class="pipeline-num">1</span>
-            </div>
-            <div class="pipeline-info">
-              <h3>PoW Mining</h3>
-              <p>Client computes SHA-256 nonce. Difficulty scales with risk score. 200ms for humans, costly for farms.</p>
-            </div>
-          </div>
-          <div class="pipeline-connector" aria-hidden="true"></div>
-          <div class="pipeline-step">
-            <div class="pipeline-node cyan">
-              <span class="pipeline-num">2</span>
-            </div>
-            <div class="pipeline-info">
-              <h3>Maze Solve</h3>
-              <p>User traces a procedurally generated maze. Path is recorded as coordinate stream. Validates spatial reasoning.</p>
-            </div>
-          </div>
-          <div class="pipeline-connector" aria-hidden="true"></div>
-          <div class="pipeline-step">
-            <div class="pipeline-node">
-              <span class="pipeline-num">3</span>
-            </div>
-            <div class="pipeline-info">
-              <h3>Behavioral Analysis</h3>
-              <p>6 biometric features scored against known human distributions. Deterministic threshold. No ML on the hot path.</p>
-            </div>
-          </div>
-          <div class="pipeline-connector" aria-hidden="true"></div>
-          <div class="pipeline-result">
-            <div class="result-human">&#10003; Human</div>
-            <div class="result-divider">/</div>
-            <div class="result-agent">&#10007; Agent</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════ WHY CERNO ═══════════════ -->
-    <section class="section why">
-      <div class="container">
-        <span class="section-label">Why Cerno</span>
-        <h2 class="section-heading">Built for a post-agent world.</h2>
-        <div class="why-grid">
-          <div class="why-card">
-            <h3>Not bot detection.<br /><span class="accent">AI safety policy enforcement.</span></h3>
-            <p>
-              Bots are scripts. Agents are intelligent. Cerno is designed for the latter&thinsp;&mdash;&thinsp;systems
-              that reason, adapt, and use real browsers.
-            </p>
-          </div>
-          <div class="why-card">
-            <h3>The maze is a Trojan horse.<br /><span class="accent-cyan">The real test is invisible.</span></h3>
-            <p>
-              Users see a maze. The system sees velocity curves, angular distributions, pause-move ratios.
-              The challenge is cover. The biometrics are the verdict.
-            </p>
-          </div>
-          <div class="why-card">
-            <h3>Deterministic scoring.<br /><span class="accent">Sub-50ms server validation.</span></h3>
-            <p>
-              No ML inference on the hot path. Statistical thresholds against known human distributions.
-              Fast, predictable, auditable.
-            </p>
-          </div>
-          <div class="why-card">
-            <h3>Open source. Self-host.<br /><span class="accent-cyan">Own your verification.</span></h3>
-            <p>
-              Deploy on Cloudflare Workers. No third-party dependencies. No data leaves your infrastructure.
-              MIT licensed.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════ FOOTER ═══════════════ -->
-    <footer class="footer">
-      <div class="container footer-inner">
+    <footer>
+      <div class="footer-inner">
         <div class="footer-left">
-          <span class="footer-logo">cerno</span>
-          <span class="footer-dot">&middot;</span>
-          <span class="footer-domain">cerno.sh</span>
+          <svg class="footer-mark" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="13" y1="3" x2="33" y2="3"/>
+              <line x1="33" y1="3" x2="33" y2="33"/>
+              <line x1="3" y1="33" x2="23" y2="33"/>
+              <line x1="3" y1="3" x2="3" y2="33"/>
+              <line x1="13" y1="13" x2="13" y2="23"/>
+              <line x1="23" y1="3" x2="23" y2="13"/>
+              <line x1="23" y1="23" x2="23" y2="33"/>
+              <line x1="13" y1="23" x2="23" y2="23"/>
+            </g>
+            <path d="M8 3 L8 8 L18 8 L18 18 L28 18 L28 28 L28 33" stroke="#2596be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="footer-name">Cerno</span>
         </div>
-        <div class="footer-center">
-          Built by <a href="https://veto.so" target="_blank" rel="noopener noreferrer">veto.so</a>
+        <div class="footer-links">
+          <a href="/docs/">Docs</a>
+          <a href="https://github.com/PlawIO/cerno" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://veto.so" target="_blank" rel="noopener">veto.so</a>
         </div>
         <div class="footer-right">
-          <a href="https://github.com/veto-party/cerno" target="_blank" rel="noopener noreferrer">GitHub</a>
-          <span class="footer-dot">&middot;</span>
-          <span>MIT License</span>
+          <span>Apache 2.0</span>
         </div>
       </div>
     </footer>
 
     <style>
-      /* ═══════════════ RESET & BASE ═══════════════ */
-      *,
-      *::before,
-      *::after {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+      :root, [data-theme='light'] {
+        --bg: #ffffff;
+        --fg: #282828;
+        --secondary: #504944;
+        --muted: #6b6866;
+        --border: rgba(0,0,0,0.06);
+        --border-strong: rgba(0,0,0,0.12);
+        --surface: #f3f3f2;
+        --accent: #2596be;
+        --accent-deep: #1d7898;
+        --accent-text: #042f2e;
+        --nav-bg: rgba(255, 255, 255, 0.9);
+        --canvas-bg: #ffffff;
+        --canvas-wall: #d6d3d1;
+        --scrollbar: rgba(0,0,0,0.1);
+        --mono: 'Geist Mono', ui-monospace, monospace;
+        --sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+        --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        color-scheme: light;
       }
 
-      html {
-        scroll-behavior: smooth;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
+      [data-theme='dark'] {
+        --bg: #0d0a09;
+        --fg: #f3ece4;
+        --secondary: #c5beb5;
+        --muted: #978f87;
+        --border: rgba(255, 245, 230, 0.08);
+        --border-strong: rgba(255, 245, 230, 0.14);
+        --surface: #1a1614;
+        --accent: #38a9d2;
+        --accent-deep: #5bbde0;
+        --accent-text: #b2e7fb;
+        --nav-bg: rgba(13, 10, 9, 0.9);
+        --canvas-bg: #1a1614;
+        --canvas-wall: #504944;
+        --scrollbar: rgba(255,245,230,0.1);
+        color-scheme: dark;
       }
+
+      /* Dark mode syntax highlighting */
+      [data-theme='dark'] .block .kw { color: #5bbde0; }
+      [data-theme='dark'] .block .fn { color: #5bbde0; }
+      [data-theme='dark'] .block .str { color: #a3d977; }
+      [data-theme='dark'] .block .prop { color: #e87b85; }
+      [data-theme='dark'] .block .cm { color: #978f87; }
+      [data-theme='dark'] .block .lit { color: #f3ece4; }
+      [data-theme='dark'] .block code { color: #c5beb5; }
+
+      html { -webkit-font-smoothing: antialiased; }
 
       body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-          sans-serif;
-        background: #0a0a0a;
-        color: #fafafa;
-        line-height: 1.6;
-        overflow-x: hidden;
+        font-family: var(--sans);
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.5;
+        font-size: 15px;
+        letter-spacing: -0.011em;
       }
 
-      a {
-        color: inherit;
-        text-decoration: none;
-      }
+      a { color: inherit; text-decoration: none; }
 
-      .container {
-        max-width: 1120px;
-        margin: 0 auto;
-        padding: 0 24px;
-      }
-
-      /* ═══════════════ NAV ═══════════════ */
-      .nav {
-        position: fixed;
+      /* NAV */
+      nav {
+        position: sticky;
         top: 0;
-        left: 0;
-        right: 0;
         z-index: 100;
-        background: rgba(10, 10, 10, 0.8);
+        background: var(--nav-bg);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        border-bottom: 1px solid var(--border);
       }
 
       .nav-inner {
-        max-width: 1120px;
+        max-width: 720px;
         margin: 0 auto;
-        padding: 0 24px;
-        height: 56px;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        padding: 0 32px;
+        height: 56px;
       }
 
-      .nav-logo {
-        font-weight: 700;
-        font-size: 1.125rem;
-        letter-spacing: -0.02em;
-        color: #fafafa;
-      }
-
-      .nav-links {
+      .logo {
         display: flex;
         align-items: center;
-        gap: 28px;
-        font-size: 0.875rem;
-        color: #a1a1aa;
-      }
-
-      .nav-links a:hover {
-        color: #fafafa;
-        transition: color 0.15s;
-      }
-
-      .nav-gh {
-        color: #fafafa !important;
+        gap: 8px;
+        font-family: var(--mono);
         font-weight: 500;
+        font-size: 15px;
+        letter-spacing: -0.02em;
       }
 
-      /* ═══════════════ HERO ═══════════════ */
+      .logo-mark { width: 20px; height: 20px; flex-shrink: 0; }
+
+      .nav-r {
+        display: flex;
+        gap: 24px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .nav-r a {
+        transition: color 0.15s;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+      .nav-r a:hover { color: var(--fg); }
+
+      /* MAIN */
+      main {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 0 32px;
+      }
+
+      /* HERO — centered, breathing, PayKit-style */
       .hero {
-        position: relative;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 120px 24px 80px;
-        overflow: hidden;
-      }
-
-      /* Animated maze background */
-      .maze-bg {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.06;
-        pointer-events: none;
-      }
-
-      .maze-grid {
-        display: grid;
-        grid-template-columns: repeat(18, 1fr);
-        grid-template-rows: repeat(10, 1fr);
-        width: 100%;
-        max-width: 1400px;
-        aspect-ratio: 18 / 10;
-        gap: 0;
-      }
-
-      .maze-cell {
-        border: 1px solid transparent;
-        animation: maze-shift 8s ease-in-out infinite;
-        animation-delay: calc(var(--d) * -0.12s);
-      }
-
-      @keyframes maze-shift {
-        0%,
-        100% {
-          border-color: transparent;
-        }
-        20% {
-          border-top-color: #6366f1;
-          border-right-color: transparent;
-          border-bottom-color: transparent;
-          border-left-color: #6366f1;
-        }
-        40% {
-          border-top-color: transparent;
-          border-right-color: #22d3ee;
-          border-bottom-color: #6366f1;
-          border-left-color: transparent;
-        }
-        60% {
-          border-top-color: #22d3ee;
-          border-right-color: transparent;
-          border-bottom-color: transparent;
-          border-left-color: #22d3ee;
-        }
-        80% {
-          border-top-color: transparent;
-          border-right-color: #6366f1;
-          border-bottom-color: #22d3ee;
-          border-left-color: transparent;
-        }
-      }
-
-      .hero-content {
-        position: relative;
-        z-index: 1;
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 104px 32px 0;
+        border-top: none !important;
         text-align: center;
-        max-width: 720px;
       }
 
-      .wordmark {
-        font-size: clamp(4rem, 12vw, 8rem);
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        line-height: 1;
-        background: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+      .hero::before { display: none; }
+
+      .hero-center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      h1 {
+        font-family: var(--serif);
+        font-size: 48px;
+        font-weight: 400;
+        letter-spacing: -0.02em;
+        line-height: 1.08;
         margin-bottom: 24px;
       }
 
-      .tagline {
-        font-size: clamp(1.25rem, 3vw, 1.75rem);
-        font-weight: 600;
-        letter-spacing: -0.01em;
-        color: #fafafa;
-        margin-bottom: 16px;
-      }
+      .hide-mobile { display: inline; }
+      .show-mobile { display: none; }
 
-      .sub-tagline {
-        font-size: clamp(0.95rem, 2vw, 1.125rem);
-        color: #a1a1aa;
-        line-height: 1.7;
+      .sub {
+        font-size: 16px;
+        font-weight: 400;
+        color: var(--secondary);
+        line-height: 1.6;
         margin-bottom: 40px;
+        max-width: 480px;
       }
 
-      .cta-row {
+      .hero-actions {
         display: flex;
+        flex-direction: column;
+        align-items: center;
         gap: 16px;
-        justify-content: center;
-        flex-wrap: wrap;
       }
 
-      .btn {
+      .install-line {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 12px 28px;
-        border-radius: 8px;
-        font-size: 0.9375rem;
-        font-weight: 600;
-        transition: all 0.2s;
+        gap: 12px;
+        padding: 10px 16px;
+        background: var(--surface);
+        border-radius: 2px;
+        width: fit-content;
+      }
+
+      .install-line code {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--fg);
+      }
+
+      .pm-switch {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--accent);
+        background: none;
+        border: none;
+        border-bottom: 1px dashed var(--accent);
+        padding: 0;
         cursor: pointer;
+        transition: opacity 0.12s;
       }
 
-      .btn-primary {
-        background: #6366f1;
-        color: #fff;
+      .pm-switch:hover { opacity: 0.7; }
+
+      .copy-btn .check-icon { display: none; }
+      .copy-btn.copied .copy-icon { display: none; }
+      .copy-btn.copied .check-icon { display: block; color: var(--accent); }
+
+      .copy-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted);
+        padding: 4px;
+        border-radius: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 150ms ease;
       }
 
-      .btn-primary:hover {
-        background: #818cf8;
-        box-shadow: 0 0 32px rgba(99, 102, 241, 0.3);
+      .copy-btn:hover { opacity: 0.6; }
+      .copy-btn.copied { color: var(--accent-deep); }
+
+      .ctas {
+        display: flex;
+        gap: 12px;
+        align-items: center;
       }
 
-      .btn-secondary {
-        background: rgba(255, 255, 255, 0.06);
-        color: #fafafa;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+      .btn-accent {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 24px;
+        background: var(--surface);
+        color: var(--fg);
+        font-size: 15px;
+        font-weight: 400;
+        border-radius: 100px;
+        border: none;
+        text-decoration: none;
+        box-shadow: none;
+        transition: opacity 150ms ease;
       }
 
-      .btn-secondary:hover {
-        background: rgba(255, 255, 255, 0.1);
-        border-color: rgba(255, 255, 255, 0.2);
+      .btn-accent:hover { opacity: 0.8; }
+      .btn-accent:active { transform: scale(0.97); }
+
+      .btn-outline {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 24px;
+        font-size: 15px;
+        font-weight: 400;
+        color: var(--fg);
+        background: transparent;
+        border: none;
+        border-radius: 100px;
+        transition: opacity 150ms ease;
       }
 
-      .gh-icon {
-        width: 16px;
-        height: 16px;
+      .btn-outline:hover { opacity: 0.5; }
+      .btn-outline:active { transform: scale(0.97); }
+
+      /* DEMO — interactive section below hero */
+      .demo {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 0 32px;
       }
 
-      /* ═══════════════ SECTIONS (shared) ═══════════════ */
-      .section {
-        padding: 120px 0;
-        position: relative;
+      /* SECTIONS */
+      section {
+        padding: 80px 0;
+        border-top: none;
+      }
+
+      section::before {
+        content: '';
+        display: block;
+        width: 80px;
+        height: 1px;
+        background: var(--border-strong);
+        margin: 0 auto 80px;
+      }
+
+      .hero::before,
+      .demo::before {
+        display: none;
       }
 
       .section-label {
-        display: inline-block;
-        font-size: 0.8125rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #6366f1;
-        margin-bottom: 16px;
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin-bottom: 24px;
       }
 
-      .section-heading {
-        font-size: clamp(1.75rem, 4vw, 2.75rem);
-        font-weight: 700;
-        letter-spacing: -0.025em;
-        line-height: 1.2;
-        margin-bottom: 56px;
-      }
-
-      .text-muted {
-        color: #71717a;
-      }
-
-      .accent {
-        color: #6366f1;
-      }
-
-      .accent-cyan {
-        color: #22d3ee;
-      }
-
-      /* ═══════════════ PROBLEM ═══════════════ */
-      .problem {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-      }
-
-      .problem .section-heading {
-        text-align: center;
-      }
-
-      .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 24px;
-        margin-bottom: 48px;
-      }
-
-      .stat-card {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        padding: 32px 24px;
+      /* LAYERS */
+      .layer {
         display: flex;
-        flex-direction: column;
-        gap: 8px;
-        transition: border-color 0.3s;
+        gap: 20px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border);
       }
 
-      .stat-card:hover {
-        border-color: rgba(99, 102, 241, 0.3);
+      .layer:last-child { border-bottom: none; }
+
+      .num {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        padding-top: 3px;
+        flex-shrink: 0;
+        width: 24px;
       }
 
-      .stat-number {
-        font-size: 2.5rem;
-        font-weight: 800;
-        letter-spacing: -0.03em;
-        background: linear-gradient(135deg, #6366f1, #22d3ee);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        line-height: 1.1;
+      .layer strong {
+        display: block;
+        font-family: var(--serif);
+        font-size: 16px;
+        font-weight: 400;
+        margin-bottom: 2px;
       }
 
-      .stat-label {
-        font-size: 0.9375rem;
-        color: #d4d4d8;
+      .desc {
+        font-size: 14px;
+        color: var(--secondary);
         line-height: 1.5;
       }
 
-      .stat-source {
-        font-size: 0.75rem;
-        color: #52525b;
-        font-style: italic;
+      /* DEMO */
+      .demo-sub {
+        font-size: 14px;
+        color: var(--secondary);
+        margin-bottom: 28px;
       }
 
-      .problem-explanation {
-        text-align: center;
-        max-width: 600px;
-        margin: 0 auto;
-        font-size: 1.0625rem;
-        color: #a1a1aa;
-        line-height: 1.7;
-      }
-
-      .problem-explanation em {
-        color: #fafafa;
-        font-style: normal;
-        font-weight: 600;
-      }
-
-      /* ═══════════════ HOW IT WORKS ═══════════════ */
-      .how {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-      }
-
-      .layers-grid {
+      .demo-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 24px;
+        grid-template-columns: 280px 1fr;
+        gap: 32px;
+        align-items: start;
       }
 
-      .layer-card {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        padding: 32px 28px;
-        transition: border-color 0.3s, transform 0.3s;
-      }
-
-      .layer-card:hover {
-        border-color: rgba(99, 102, 241, 0.3);
-        transform: translateY(-2px);
-      }
-
-      .layer-icon {
-        width: 40px;
-        height: 40px;
-        color: #6366f1;
-        margin-bottom: 20px;
-      }
-
-      .layer-icon.accent-cyan {
-        color: #22d3ee;
-      }
-
-      .layer-card h3 {
-        font-size: 1.125rem;
-        font-weight: 700;
-        margin-bottom: 4px;
-      }
-
-      .layer-subtitle {
-        font-size: 0.8125rem;
-        color: #6366f1;
-        font-weight: 500;
-        margin-bottom: 12px;
-        display: block;
-      }
-
-      .layer-card:nth-child(2) .layer-subtitle {
-        color: #22d3ee;
-      }
-
-      .layer-card p:last-child {
-        font-size: 0.9375rem;
-        color: #a1a1aa;
-        line-height: 1.6;
-      }
-
-      /* ═══════════════ CODE ═══════════════ */
-      .code-section {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-      }
-
-      .code-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 24px;
-      }
-
-      .code-block {
-        background: #111113;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        overflow: hidden;
-      }
-
-      .code-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 16px;
-        background: rgba(255, 255, 255, 0.03);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      }
-
-      .code-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-      }
-
-      .code-dot.red {
-        background: #ef4444;
-        opacity: 0.7;
-      }
-
-      .code-dot.yellow {
-        background: #eab308;
-        opacity: 0.7;
-      }
-
-      .code-dot.green {
-        background: #22c55e;
-        opacity: 0.7;
-      }
-
-      .code-filename {
-        margin-left: 8px;
-        font-size: 0.8125rem;
-        color: #71717a;
-        font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
-      }
-
-      .code-block pre {
-        padding: 20px;
-        overflow-x: auto;
-        scrollbar-width: thin;
-        scrollbar-color: #27272a transparent;
-      }
-
-      .code-block code {
-        font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
-        font-size: 0.8125rem;
-        line-height: 1.7;
-        color: #d4d4d8;
-      }
-
-      .kw {
-        color: #c084fc;
-      }
-
-      .fn {
-        color: #67e8f9;
-      }
-
-      .str {
-        color: #86efac;
-      }
-
-      .attr {
-        color: #fbbf24;
-      }
-
-      .param {
-        color: #fb923c;
-      }
-
-      .const {
-        color: #f472b6;
-      }
-
-      .cmt {
-        color: #52525b;
-        font-style: italic;
-      }
-
-      /* ═══════════════ ARCHITECTURE ═══════════════ */
-      .architecture {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-      }
-
-      .pipeline {
+      .maze-wrap {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0;
-        max-width: 560px;
-        margin: 0 auto;
+        gap: 12px;
       }
 
-      .pipeline-step {
-        display: flex;
-        align-items: flex-start;
-        gap: 24px;
-        width: 100%;
-        padding: 24px;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        transition: border-color 0.3s;
+      #maze-canvas {
+        width: 280px;
+        height: 280px;
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        cursor: crosshair;
+        touch-action: none;
+        display: block;
       }
 
-      .pipeline-step:hover {
-        border-color: rgba(99, 102, 241, 0.3);
-      }
-
-      .pipeline-node {
-        flex-shrink: 0;
-        width: 44px;
-        height: 44px;
-        border-radius: 10px;
-        background: rgba(99, 102, 241, 0.15);
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        display: flex;
+      .new-maze {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        background: none;
+        border: 1px solid var(--border-strong);
+        border-radius: 100px;
+        cursor: pointer;
+        transition: color 150ms ease, border-color 150ms ease;
+        min-height: 36px;
+        padding: 0 16px;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #6366f1;
-        font-weight: 700;
-        font-size: 1rem;
       }
 
-      .pipeline-node.cyan {
-        background: rgba(34, 211, 238, 0.1);
-        border-color: rgba(34, 211, 238, 0.3);
-        color: #22d3ee;
+      .new-maze:hover { color: var(--fg); border-color: var(--muted); }
+      .new-maze:active { transform: scale(0.97); }
+
+      .score-panel { padding-top: 0; }
+
+      .score-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 0;
       }
 
-      .pipeline-num {
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
+      .score-row code {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--secondary);
+        min-width: 100px;
+        flex-shrink: 0;
+        white-space: nowrap;
       }
 
-      .pipeline-info h3 {
-        font-size: 1rem;
-        font-weight: 700;
+      .bar {
+        flex: 1;
+        height: 3px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .bar-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--accent);
+        border-radius: 2px;
+        transition: width 0.3s ease;
+      }
+
+      .val {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        width: 36px;
+        text-align: right;
+        flex-shrink: 0;
+      }
+
+      .score-total {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+
+      .score-label {
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .score-value {
+        font-family: var(--mono);
+        font-size: 20px;
+        font-weight: 600;
+        transition: color 0.3s;
+      }
+
+      .score-hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+
+      /* FEATURES — 7 items, 2 cols + orphan */
+      .feat-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+
+      .feat code {
+        display: block;
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--fg);
         margin-bottom: 4px;
       }
 
-      .pipeline-info p {
-        font-size: 0.875rem;
-        color: #a1a1aa;
-        line-height: 1.6;
+      .feat span {
+        font-size: 13px;
+        color: var(--secondary);
+        line-height: 1.5;
       }
 
-      .pipeline-connector {
-        width: 2px;
-        height: 24px;
-        background: linear-gradient(to bottom, rgba(99, 102, 241, 0.3), rgba(34, 211, 238, 0.3));
-      }
-
-      .pipeline-result {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 20px 32px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        font-weight: 700;
-        font-size: 1.0625rem;
-      }
-
-      .result-human {
-        color: #22c55e;
-      }
-
-      .result-divider {
-        color: #3f3f46;
-      }
-
-      .result-agent {
-        color: #ef4444;
-      }
-
-      /* ═══════════════ WHY CERNO ═══════════════ */
-      .why {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-      }
-
-      .why-grid {
+      /* CODE BLOCKS */
+      .code-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 24px;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
       }
 
-      .why-card {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        padding: 32px 28px;
-        transition: border-color 0.3s;
+      .block {
+        background: var(--surface);
+        border: none;
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
       }
 
-      .why-card:hover {
-        border-color: rgba(99, 102, 241, 0.2);
-      }
-
-      .why-card h3 {
-        font-size: 1.0625rem;
-        font-weight: 700;
-        line-height: 1.4;
-        margin-bottom: 12px;
-      }
-
-      .why-card h3 .accent {
-        color: #6366f1;
-      }
-
-      .why-card h3 .accent-cyan {
-        color: #22d3ee;
-      }
-
-      .why-card p {
-        font-size: 0.9375rem;
-        color: #a1a1aa;
-        line-height: 1.6;
-      }
-
-      /* ═══════════════ FOOTER ═══════════════ */
-      .footer {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-        padding: 24px 0;
-      }
-
-      .footer-inner {
+      .block-h {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.02em;
+        color: var(--muted);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        font-size: 0.8125rem;
-        color: #71717a;
       }
 
-      .footer-logo {
-        font-weight: 700;
-        color: #a1a1aa;
-        font-size: 0.875rem;
+      .block pre {
+        padding: 16px;
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar) transparent;
+        flex: 1;
       }
 
-      .footer-domain {
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
-        font-size: 0.75rem;
+      .block code {
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.5;
+        color: #6b6866;
       }
 
-      .footer-dot {
-        color: #3f3f46;
-        margin: 0 4px;
-      }
+      /* Syntax highlighting */
+      .block .kw { color: #1d7898; }
+      .block .fn { color: #1d7898; }
+      .block .str { color: #7EAC21; }
+      .block .prop { color: #c44d5a; }
+      .block .cm { color: #6F7D8D; font-style: italic; }
+      .block .lit { color: #282828; }
 
-      .footer-center a {
-        color: #6366f1;
-        font-weight: 500;
+      /* THEME TOGGLE */
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted);
+        padding: 4px;
+        min-height: 44px;
+        min-width: 44px;
         transition: color 0.15s;
       }
+      .theme-toggle:hover { color: var(--fg); }
+      .theme-toggle svg { width: 16px; height: 16px; }
+      .theme-toggle .icon-sun,
+      .theme-toggle .icon-moon,
+      .theme-toggle .icon-auto { display: none; }
+      [data-theme='light'] .theme-toggle[data-mode='light'] .icon-sun,
+      [data-theme='dark'] .theme-toggle[data-mode='dark'] .icon-moon,
+      .theme-toggle[data-mode='auto'] .icon-auto { display: block; }
+      /* Fallback: show auto icon when no data-mode set */
+      .theme-toggle:not([data-mode]) .icon-auto { display: block; }
 
-      .footer-center a:hover {
-        color: #818cf8;
+      /* FOOTER */
+      footer {
+        border-top: 1px solid var(--border);
+        margin-top: 0;
       }
 
-      .footer-right {
+      .footer-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 32px 48px;
         display: flex;
         align-items: center;
-      }
-
-      .footer-right a {
-        color: #71717a;
-        transition: color 0.15s;
-      }
-
-      .footer-right a:hover {
-        color: #fafafa;
+        justify-content: space-between;
+        gap: 16px;
       }
 
       .footer-left {
         display: flex;
         align-items: center;
+        gap: 8px;
       }
 
-      /* ═══════════════ RESPONSIVE ═══════════════ */
-      @media (max-width: 768px) {
-        .section {
-          padding: 80px 0;
-        }
+      .footer-mark { width: 16px; height: 16px; color: var(--muted); }
 
-        .section-heading {
-          margin-bottom: 40px;
-        }
-
-        .stats-grid,
-        .layers-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .code-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .why-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .nav-links a:not(.nav-gh) {
-          display: none;
-        }
-
-        .footer-inner {
-          flex-direction: column;
-          gap: 12px;
-          text-align: center;
-        }
-
-        .hero {
-          padding: 100px 24px 60px;
-          min-height: auto;
-        }
-
-        .wordmark {
-          margin-bottom: 16px;
-        }
-
-        .cta-row {
-          flex-direction: column;
-          align-items: center;
-        }
-
-        .btn {
-          width: 100%;
-          max-width: 280px;
-          justify-content: center;
-        }
-
-        .pipeline-step {
-          gap: 16px;
-          padding: 20px 16px;
-        }
+      .footer-name {
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--secondary);
       }
 
-      @media (max-width: 480px) {
-        .section {
-          padding: 64px 0;
-        }
-
-        .stat-number {
-          font-size: 2rem;
-        }
-
-        .pipeline-info h3 {
-          font-size: 0.9375rem;
-        }
-
-        .pipeline-info p {
-          font-size: 0.8125rem;
-        }
+      .footer-links {
+        display: flex;
+        gap: 24px;
+        font-size: 13px;
+        color: var(--muted);
       }
 
-      /* ═══════════════ SUBTLE GLOW EFFECTS ═══════════════ */
-      .hero::after {
-        content: '';
-        position: absolute;
-        top: 20%;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 600px;
-        height: 400px;
-        background: radial-gradient(
-          ellipse at center,
-          rgba(99, 102, 241, 0.08) 0%,
-          rgba(34, 211, 238, 0.03) 40%,
-          transparent 70%
-        );
-        pointer-events: none;
-        z-index: 0;
+      .footer-links a {
+        transition: color 0.15s;
+      }
+      .footer-links a:hover { color: var(--fg); }
+
+      .footer-right {
+        font-size: 12px;
+        color: var(--muted);
+        font-family: var(--mono);
       }
 
-      .problem::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 400px;
-        height: 400px;
-        background: radial-gradient(
-          circle at top right,
-          rgba(99, 102, 241, 0.04) 0%,
-          transparent 60%
-        );
-        pointer-events: none;
+      /* ENTRANCE */
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
 
-      .architecture::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 0;
-        transform: translateY(-50%);
-        width: 300px;
-        height: 500px;
-        background: radial-gradient(
-          circle at left,
-          rgba(34, 211, 238, 0.03) 0%,
-          transparent 60%
-        );
-        pointer-events: none;
+      .hero-center > * {
+        opacity: 0;
+        animation: fadeIn 0.4s ease forwards;
       }
 
-      /* ═══════════════ SELECTION ═══════════════ */
-      ::selection {
-        background: rgba(99, 102, 241, 0.3);
-        color: #fafafa;
+      .hero-center > :nth-child(1) { animation-delay: 0.05s; }
+      .hero-center > :nth-child(2) { animation-delay: 0.15s; }
+      .hero-center > :nth-child(3) { animation-delay: 0.25s; }
+
+      /* RESPONSIVE */
+      @media (max-width: 640px) {
+        html, body { overflow-x: hidden; max-width: 100vw; }
+        .nav-inner { padding: 0 20px; }
+        .nav-r { gap: 16px; font-size: 13px; }
+        main { padding: 0 20px; }
+        .hero { padding: 64px 0 0; max-width: 100%; text-align: left; }
+        .hero-center { align-items: flex-start; min-width: 0; width: 100%; }
+        .hero-center > * { min-width: 0; max-width: 100%; }
+        .demo { padding: 0; }
+        h1 { font-size: 30px; line-height: 1.12; }
+        .hide-mobile { display: none; }
+        .show-mobile { display: inline; }
+        .sub { font-size: 14px; margin-bottom: 28px; }
+        .install-line { width: 100%; justify-content: space-between; }
+        .install-line code { font-size: 11px; }
+        .pm-switch { font-size: 11px; }
+        .demo-grid { grid-template-columns: 1fr; }
+        #maze-canvas { width: 100%; max-width: 280px; height: auto; aspect-ratio: 1; }
+        .maze-wrap { align-items: center; }
+        .score-row code { min-width: 72px; font-size: 10px; }
+        .code-grid { grid-template-columns: 1fr; }
+        .feat-grid { grid-template-columns: 1fr; }
+        .ctas { flex-direction: row; }
+        section { padding: 48px 0; }
+        section::before { margin-bottom: 48px; }
+        .footer-inner { flex-direction: column; text-align: center; gap: 12px; }
       }
 
-      /* ═══════════════ SCROLLBAR ═══════════════ */
-      ::-webkit-scrollbar {
-        width: 8px;
+      @media (prefers-reduced-motion: reduce) {
+        .hero-center > * { opacity: 1; animation: none; }
       }
 
-      ::-webkit-scrollbar-track {
-        background: #0a0a0a;
-      }
-
-      ::-webkit-scrollbar-thumb {
-        background: #27272a;
-        border-radius: 4px;
-      }
-
-      ::-webkit-scrollbar-thumb:hover {
-        background: #3f3f46;
-      }
+      ::selection { background: rgba(37, 150, 190, 0.22); color: var(--fg); }
     </style>
+
+    <script is:inline>
+    document.addEventListener('DOMContentLoaded', function() {
+      // ── Package manager switcher ──
+      var pms = [
+        { label: 'npm i', cmd: 'npm i' },
+        { label: 'pnpm add', cmd: 'pnpm add' },
+        { label: 'yarn add', cmd: 'yarn add' },
+        { label: 'bun add', cmd: 'bun add' }
+      ];
+      var pmIdx = 0;
+      var pmSwitch = document.getElementById('pm-switch');
+      var pkgCopy = document.getElementById('pkg-copy');
+      var pkgs = ' @cernosh/react @cernosh/server';
+
+      if (pmSwitch) {
+        pmSwitch.addEventListener('click', function() {
+          pmIdx = (pmIdx + 1) % pms.length;
+          pmSwitch.textContent = pms[pmIdx].label;
+        });
+      }
+
+      if (pkgCopy) {
+        pkgCopy.addEventListener('click', function() {
+          var full = pms[pmIdx].cmd + pkgs;
+          navigator.clipboard.writeText(full).then(function() {
+            pkgCopy.classList.add('copied');
+            setTimeout(function() { pkgCopy.classList.remove('copied'); }, 1500);
+          });
+        });
+      }
+
+      // ── Copy buttons (code blocks) ──
+      document.querySelectorAll('.copy-btn:not(#pkg-copy)').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var text = btn.getAttribute('data-copy');
+          if (!text) {
+            var fromId = btn.getAttribute('data-copy-from');
+            if (fromId) {
+              var el = document.getElementById(fromId);
+              if (el) text = el.textContent;
+            }
+          }
+          if (text) {
+            navigator.clipboard.writeText(text).then(function() {
+              btn.classList.add('copied');
+              setTimeout(function() { btn.classList.remove('copied'); }, 1500);
+            });
+          }
+        });
+      });
+
+      // ── mulberry32 seeded PRNG (exact copy from @cernosh/core) ──
+      function mulberry32(seed) {
+        var s = seed | 0;
+        return function() {
+          s = (s + 0x6d2b79f5) | 0;
+          var t = Math.imul(s ^ (s >>> 15), 1 | s);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      // ── Wall bitmask constants (exact copy from @cernosh/core) ──
+      var W_N = 1, W_S = 2, W_E = 4, W_W = 8;
+      var DIRS = [W_N, W_S, W_E, W_W];
+      var DX = {}; DX[W_N] = 0; DX[W_S] = 0; DX[W_E] = 1; DX[W_W] = -1;
+      var DY = {}; DY[W_N] = -1; DY[W_S] = 1; DY[W_E] = 0; DY[W_W] = 0;
+      var OPP = {}; OPP[W_N] = W_S; OPP[W_S] = W_N; OPP[W_E] = W_W; OPP[W_W] = W_E;
+
+      // ── Growing Tree maze generation (exact algorithm from @cernosh/core) ──
+      var MW = 7, MH = 7, DIFF = 0.3;
+
+      function generateMaze(seed) {
+        var rand = mulberry32(seed);
+        var grid = [];
+        for (var y = 0; y < MH; y++) {
+          grid[y] = [];
+          for (var x = 0; x < MW; x++) {
+            grid[y][x] = { x: x, y: y, walls: W_N | W_S | W_E | W_W };
+          }
+        }
+        var visited = [];
+        for (var y2 = 0; y2 < MH; y2++) {
+          visited[y2] = [];
+          for (var x2 = 0; x2 < MW; x2++) visited[y2][x2] = false;
+        }
+
+        var active = [];
+        var sx = Math.floor(rand() * MW), sy = Math.floor(rand() * MH);
+        active.push({ x: sx, y: sy });
+        visited[sy][sx] = true;
+
+        while (active.length > 0) {
+          var idx = rand() < DIFF
+            ? Math.floor(rand() * active.length)
+            : active.length - 1;
+          var cell = active[idx];
+          var dirs = shuffled(DIRS, rand);
+          var carved = false;
+          for (var di = 0; di < dirs.length; di++) {
+            var dir = dirs[di];
+            var nx = cell.x + DX[dir], ny = cell.y + DY[dir];
+            if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && !visited[ny][nx]) {
+              grid[cell.y][cell.x].walls &= ~dir;
+              grid[ny][nx].walls &= ~OPP[dir];
+              visited[ny][nx] = true;
+              active.push({ x: nx, y: ny });
+              carved = true;
+              break;
+            }
+          }
+          if (!carved) active.splice(idx, 1);
+        }
+
+        var start = { x: 0, y: 0 }, exit = { x: MW - 1, y: MH - 1 };
+        var solution = solveMaze(grid, start, exit);
+        return { grid: grid, start: start, exit: exit, solution: solution, seed: seed };
+      }
+
+      function shuffled(arr, rand) {
+        var a = arr.slice();
+        for (var i = a.length - 1; i > 0; i--) {
+          var j = Math.floor(rand() * (i + 1));
+          var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+        }
+        return a;
+      }
+
+      function solveMaze(grid, start, exit) {
+        var vis = [], par = new Map();
+        for (var y = 0; y < MH; y++) {
+          vis[y] = [];
+          for (var x = 0; x < MW; x++) vis[y][x] = false;
+        }
+        var queue = [start], head = 0;
+        vis[start.y][start.x] = true;
+        par.set(start.x + ',' + start.y, null);
+
+        while (head < queue.length) {
+          var c = queue[head++];
+          if (c.x === exit.x && c.y === exit.y) {
+            var path = [], node = c;
+            while (node !== null) {
+              path.unshift({ x: node.x, y: node.y });
+              node = par.get(node.x + ',' + node.y);
+            }
+            return path;
+          }
+          var cell = grid[c.y][c.x];
+          for (var di = 0; di < DIRS.length; di++) {
+            if (cell.walls & DIRS[di]) continue;
+            var nx = c.x + DX[DIRS[di]], ny = c.y + DY[DIRS[di]];
+            if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && !vis[ny][nx]) {
+              vis[ny][nx] = true;
+              par.set(nx + ',' + ny, c);
+              queue.push({ x: nx, y: ny });
+            }
+          }
+        }
+        return [start, exit];
+      }
+
+      // ── Canvas rendering (matches @cernosh/react MazeCanvas) ──
+      var CELL = 36, MARGIN = 16;
+      var canvas = document.getElementById('maze-canvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var logW = MW * CELL + MARGIN * 2;
+      var logH = MH * CELL + MARGIN * 2;
+      var maze, dragState;
+
+      function resizeCanvas() {
+        var dpr = window.devicePixelRatio || 1;
+        var dispW = canvas.clientWidth;
+        var scale = dispW / logW;
+        canvas.width = dispW * dpr;
+        canvas.height = dispW * dpr; // square
+        ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+      }
+
+      function cellCenter(cx, cy) {
+        return { px: MARGIN + cx * CELL + CELL / 2, py: MARGIN + cy * CELL + CELL / 2 };
+      }
+
+      function pxToCell(px, py) {
+        var cx = Math.floor((px - MARGIN) / CELL);
+        var cy = Math.floor((py - MARGIN) / CELL);
+        if (cx < 0 || cx >= MW || cy < 0 || cy >= MH) return null;
+        return { x: cx, y: cy };
+      }
+
+      function canPass(fx, fy, tx, ty) {
+        var dx = tx - fx, dy = ty - fy;
+        if (Math.abs(dx) + Math.abs(dy) !== 1) return false;
+        var dir;
+        if (dx === 1) dir = W_E;
+        else if (dx === -1) dir = W_W;
+        else if (dy === 1) dir = W_S;
+        else dir = W_N;
+        return !(maze.grid[fy][fx].walls & dir);
+      }
+
+      function drawMaze() {
+        resizeCanvas();
+        var cs = getComputedStyle(document.documentElement);
+        // Background
+        ctx.fillStyle = cs.getPropertyValue('--canvas-bg').trim();
+        ctx.fillRect(0, 0, logW, logH);
+
+        // Walls
+        ctx.strokeStyle = cs.getPropertyValue('--canvas-wall').trim();
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        for (var y = 0; y < MH; y++) {
+          for (var x = 0; x < MW; x++) {
+            var c = maze.grid[y][x];
+            var px = MARGIN + x * CELL, py = MARGIN + y * CELL;
+            if (c.walls & W_N) { ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + CELL, py); ctx.stroke(); }
+            if (c.walls & W_S) { ctx.beginPath(); ctx.moveTo(px, py + CELL); ctx.lineTo(px + CELL, py + CELL); ctx.stroke(); }
+            if (c.walls & W_W) { ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + CELL); ctx.stroke(); }
+            if (c.walls & W_E) { ctx.beginPath(); ctx.moveTo(px + CELL, py); ctx.lineTo(px + CELL, py + CELL); ctx.stroke(); }
+          }
+        }
+
+        // Start marker (green circle)
+        var sc = cellCenter(maze.start.x, maze.start.y);
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(sc.px, sc.py, CELL * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Exit marker (red circle)
+        var ec = cellCenter(maze.exit.x, maze.exit.y);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(ec.px, ec.py, CELL * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // User trace
+        if (dragState && dragState.path.length > 1) {
+          ctx.strokeStyle = '#2596be';
+          ctx.lineWidth = 3;
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          var fp = cellCenter(dragState.path[0].x, dragState.path[0].y);
+          ctx.moveTo(fp.px, fp.py);
+          for (var i = 1; i < dragState.path.length; i++) {
+            var pt = cellCenter(dragState.path[i].x, dragState.path[i].y);
+            ctx.lineTo(pt.px, pt.py);
+          }
+          ctx.stroke();
+        }
+      }
+
+      // ── Feature extraction (exact algorithm from @cernosh/core) ──
+      function resample60Hz(events) {
+        if (events.length < 2) return events;
+        var INTERVAL = 1000 / 60;
+        var out = [];
+        var start = events[0].t, end = events[events.length - 1].t;
+        var ei = 0;
+        for (var t = start; t <= end && out.length < 5000; t += INTERVAL) {
+          while (ei < events.length - 1 && events[ei + 1].t < t) ei++;
+          if (ei >= events.length - 1) { out.push({ t: t, x: events[events.length - 1].x, y: events[events.length - 1].y }); break; }
+          var e0 = events[ei], e1 = events[ei + 1];
+          var dt = e1.t - e0.t;
+          var r = dt === 0 ? 0 : (t - e0.t) / dt;
+          out.push({ t: t, x: e0.x + (e1.x - e0.x) * r, y: e0.y + (e1.y - e0.y) * r });
+        }
+        return out;
+      }
+
+      function stdDev(a) {
+        if (a.length < 2) return 0;
+        var m = 0; for (var i = 0; i < a.length; i++) m += a[i]; m /= a.length;
+        var v = 0; for (var j = 0; j < a.length; j++) v += (a[j] - m) * (a[j] - m);
+        return Math.sqrt(v / (a.length - 1));
+      }
+
+      function shannonEntropy(vals, bins) {
+        if (vals.length === 0) return 0;
+        var mn = vals[0], mx = vals[0];
+        for (var i = 1; i < vals.length; i++) { if (vals[i] < mn) mn = vals[i]; if (vals[i] > mx) mx = vals[i]; }
+        var rng = mx - mn;
+        if (rng === 0) return 0;
+        var b = new Array(bins).fill(0);
+        for (var j = 0; j < vals.length; j++) b[Math.min(Math.floor((vals[j] - mn) / rng * bins), bins - 1)]++;
+        var ent = 0;
+        for (var k = 0; k < bins; k++) { if (b[k] === 0) continue; var p = b[k] / vals.length; ent -= p * Math.log2(p); }
+        return ent;
+      }
+
+      function extractFeatures(rawEvents) {
+        if (rawEvents.length < 2) return null;
+        var sampled = resample60Hz(rawEvents);
+        if (sampled.length < 2) return null;
+
+        var velocities = [], totalPath = 0;
+        for (var i = 1; i < sampled.length; i++) {
+          var dx = sampled[i].x - sampled[i - 1].x, dy = sampled[i].y - sampled[i - 1].y;
+          var dt = sampled[i].t - sampled[i - 1].t;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          totalPath += dist;
+          velocities.push(dt > 0 ? dist / dt : 0);
+        }
+
+        var euclid = Math.sqrt(
+          Math.pow(sampled[sampled.length - 1].x - sampled[0].x, 2) +
+          Math.pow(sampled[sampled.length - 1].y - sampled[0].y, 2)
+        );
+
+        var pauseCount = 0, pauseStart = -1;
+        for (var pi = 0; pi < velocities.length; pi++) {
+          if (velocities[pi] < 0.0005) {
+            if (pauseStart === -1) pauseStart = pi;
+          } else {
+            if (pauseStart !== -1 && sampled[pi].t - sampled[pauseStart].t >= 100) pauseCount++;
+            pauseStart = -1;
+          }
+        }
+        if (pauseStart !== -1 && sampled[sampled.length - 1].t - sampled[pauseStart].t >= 100) pauseCount++;
+
+        var onsetMs = 0;
+        for (var oi = 0; oi < velocities.length; oi++) {
+          if (velocities[oi] > 0.001) { onsetMs = sampled[oi].t - sampled[0].t; break; }
+        }
+
+        var accels = [];
+        for (var ai = 1; ai < velocities.length; ai++) {
+          var adt = sampled[Math.min(ai + 1, sampled.length - 1)].t - sampled[ai].t;
+          accels.push(adt > 0 ? (velocities[ai] - velocities[ai - 1]) / adt : 0);
+        }
+        var jerks = [];
+        for (var ji = 1; ji < accels.length; ji++) {
+          var jdt = sampled[Math.min(ji + 2, sampled.length - 1)].t - sampled[Math.min(ji + 1, sampled.length - 1)].t;
+          jerks.push(jdt > 0 ? (accels[ji] - accels[ji - 1]) / jdt : 0);
+        }
+
+        var angles = [];
+        for (var gi = 1; gi < sampled.length; gi++) {
+          var gdx = sampled[gi].x - sampled[gi - 1].x, gdy = sampled[gi].y - sampled[gi - 1].y;
+          if (Math.abs(gdx) > 1e-8 || Math.abs(gdy) > 1e-8) angles.push(Math.atan2(gdy, gdx));
+        }
+        var angVels = [];
+        for (var vi = 1; vi < angles.length; vi++) {
+          var da = angles[vi] - angles[vi - 1];
+          while (da > Math.PI) da -= 2 * Math.PI;
+          while (da < -Math.PI) da += 2 * Math.PI;
+          angVels.push(da);
+        }
+
+        var intervals = [];
+        for (var ti = 1; ti < rawEvents.length; ti++) {
+          var tdt = rawEvents[ti].t - rawEvents[ti - 1].t;
+          if (tdt > 0) intervals.push(tdt);
+        }
+        var timingCv = 0;
+        if (intervals.length >= 2) {
+          var meanInt = 0; for (var mi2 = 0; mi2 < intervals.length; mi2++) meanInt += intervals[mi2];
+          meanInt /= intervals.length;
+          if (meanInt > 0) timingCv = stdDev(intervals) / meanInt;
+        }
+
+        return {
+          velocity_std: stdDev(velocities),
+          path_efficiency: totalPath > 0 ? euclid / totalPath : 0,
+          pause_count: pauseCount,
+          movement_onset_ms: onsetMs,
+          jerk_std: stdDev(jerks),
+          angular_velocity_entropy: shannonEntropy(angVels, 16),
+          timing_cv: timingCv,
+          sample_count: sampled.length,
+          total_duration_ms: sampled[sampled.length - 1].t - sampled[0].t
+        };
+      }
+
+      // ── Gaussian scoring (same as @cernosh/server behavioral-scoring) ──
+      function gaussScore(val, mean, sd) {
+        if (sd === 0) return val === mean ? 1 : 0;
+        var z = (val - mean) / sd;
+        return Math.exp(-0.5 * Math.pow(z / 3, 2));
+      }
+
+      function scoreFeatures(feat) {
+        if (!feat) return 0;
+        var scores = [
+          gaussScore(feat.velocity_std, 0.0004, 0.0003) * 1.0,
+          gaussScore(feat.path_efficiency, 0.45, 0.15) * 1.0,
+          gaussScore(feat.pause_count, 2, 1.5) * 0.8,
+          gaussScore(feat.movement_onset_ms, 800, 400) * 0.6,
+          gaussScore(feat.jerk_std, 5e-7, 5e-7) * 1.0,
+          gaussScore(feat.angular_velocity_entropy, 2.5, 0.5) * 1.5,
+          gaussScore(feat.timing_cv, 0.5, 0.2) * 1.0,
+        ];
+        var totalWeight = 1.0 + 1.0 + 0.8 + 0.6 + 1.0 + 1.5 + 1.0;
+        var sum = 0; for (var i = 0; i < scores.length; i++) sum += scores[i];
+        var score = sum / totalWeight;
+        if (feat.sample_count < 20) score *= feat.sample_count / 20;
+        if (feat.total_duration_ms < 2000) score *= feat.total_duration_ms / 2000;
+        return Math.max(0, Math.min(1, score));
+      }
+
+      // ── Interaction ──
+      var rawEvents = [];
+      var completed = false;
+
+      function canvasCoords(e) {
+        var rect = canvas.getBoundingClientRect();
+        var scale = logW / rect.width;
+        return { px: (e.clientX - rect.left) * scale, py: (e.clientY - rect.top) * scale };
+      }
+
+      canvas.addEventListener('pointerdown', function(e) {
+        if (completed) return;
+        var coords = canvasCoords(e);
+        var cell = pxToCell(coords.px, coords.py);
+        if (!cell || cell.x !== maze.start.x || cell.y !== maze.start.y) return;
+
+        canvas.setPointerCapture(e.pointerId);
+        dragState = {
+          dragging: true,
+          path: [{ x: cell.x, y: cell.y }],
+          visited: new Set([cell.x + ',' + cell.y]),
+          current: cell
+        };
+        rawEvents = [{ x: coords.px / logW, y: coords.py / logH, t: performance.now() }];
+        document.getElementById('score-hint').textContent = 'Tracing...';
+        drawMaze();
+      });
+
+      canvas.addEventListener('pointermove', function(e) {
+        if (!dragState || !dragState.dragging || completed) return;
+        var coords = canvasCoords(e);
+        var now = performance.now();
+        rawEvents.push({ x: coords.px / logW, y: coords.py / logH, t: now });
+
+        var cell = pxToCell(coords.px, coords.py);
+        if (!cell || !dragState.current) return;
+        if (cell.x === dragState.current.x && cell.y === dragState.current.y) {
+          // Still same cell, just update score display
+          if (rawEvents.length > 10) updateDisplay(false);
+          return;
+        }
+        if (!canPass(dragState.current.x, dragState.current.y, cell.x, cell.y)) return;
+
+        var key = cell.x + ',' + cell.y;
+
+        // Backtrack
+        if (dragState.path.length >= 2) {
+          var prev = dragState.path[dragState.path.length - 2];
+          if (prev.x === cell.x && prev.y === cell.y) {
+            var removed = dragState.path.pop();
+            dragState.visited.delete(removed.x + ',' + removed.y);
+            dragState.current = cell;
+            drawMaze();
+            return;
+          }
+        }
+
+        if (dragState.visited.has(key)) return;
+
+        dragState.path.push({ x: cell.x, y: cell.y });
+        dragState.visited.add(key);
+        dragState.current = cell;
+        drawMaze();
+
+        if (cell.x === maze.exit.x && cell.y === maze.exit.y) {
+          completed = true;
+          dragState.dragging = false;
+          updateDisplay(true);
+        }
+      });
+
+      canvas.addEventListener('pointerup', function() {
+        if (!dragState || !dragState.dragging) return;
+        dragState.dragging = false;
+        dragState.path = [];
+        dragState.visited = new Set();
+        dragState.current = null;
+        rawEvents = [];
+        drawMaze();
+      });
+
+      function updateDisplay(final) {
+        var feat = extractFeatures(rawEvents);
+        if (!feat) return;
+
+        var feats = ['velocity_std', 'path_efficiency', 'pause_count', 'movement_onset_ms', 'jerk_std', 'angular_velocity_entropy', 'timing_cv'];
+        var maxVals = {
+          velocity_std: 0.001, path_efficiency: 1, pause_count: 6,
+          movement_onset_ms: 2000, jerk_std: 2e-6, angular_velocity_entropy: 4, timing_cv: 1.5
+        };
+
+        feats.forEach(function(f) {
+          var bar = document.querySelector('[data-feat="' + f + '"]');
+          var val = document.querySelector('[data-val="' + f + '"]');
+          if (bar) bar.style.width = Math.min(100, (feat[f] / maxVals[f]) * 100) + '%';
+          if (val) {
+            if (f === 'pause_count') val.textContent = Math.round(feat[f]);
+            else if (f === 'movement_onset_ms') val.textContent = Math.round(feat[f]) + 'ms';
+            else val.textContent = feat[f].toFixed(4);
+          }
+        });
+
+        var score = scoreFeatures(feat);
+        var sv = document.getElementById('score-value');
+        sv.textContent = score.toFixed(2);
+        sv.style.color = score > 0.6 ? '#16a34a' : '#dc2626';
+
+        if (final) {
+          document.getElementById('score-hint').textContent =
+            score > 0.6 ? 'Pass' : 'Reject';
+        }
+      }
+
+      // ── Init ──
+      function init() {
+        var seed = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
+        maze = generateMaze(seed);
+        dragState = null;
+        completed = false;
+        rawEvents = [];
+        // Reset score display
+        document.querySelectorAll('.bar-fill').forEach(function(b) { b.style.width = '0%'; });
+        document.querySelectorAll('.val').forEach(function(v) { v.textContent = '\u2014'; });
+        document.getElementById('score-value').textContent = '\u2014';
+        document.getElementById('score-value').style.color = '';
+        document.getElementById('score-hint').textContent = 'Trace from green to red';
+        drawMaze();
+      }
+
+      document.getElementById('new-maze').addEventListener('click', function(e) {
+        e.preventDefault();
+        init();
+      });
+
+      window.addEventListener('resize', function() { drawMaze(); });
+      init();
+
+      // ── Theme toggle ──
+      var modes = ['auto', 'light', 'dark'];
+      var toggleBtn = document.getElementById('theme-toggle');
+      var stored = localStorage.getItem('starlight-theme');
+      var currentMode = (stored === 'light' || stored === 'dark') ? stored : 'auto';
+
+      function applyTheme(mode) {
+        currentMode = mode;
+        toggleBtn.setAttribute('data-mode', mode);
+        var dark;
+        if (mode === 'auto') {
+          dark = matchMedia('(prefers-color-scheme:dark)').matches;
+          localStorage.removeItem('starlight-theme');
+        } else {
+          dark = mode === 'dark';
+          localStorage.setItem('starlight-theme', mode);
+        }
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        if (maze) drawMaze();
+      }
+
+      toggleBtn.setAttribute('data-mode', currentMode);
+      toggleBtn.addEventListener('click', function() {
+        var next = modes[(modes.indexOf(currentMode) + 1) % modes.length];
+        applyTheme(next);
+      });
+
+      matchMedia('(prefers-color-scheme:dark)').addEventListener('change', function() {
+        if (currentMode === 'auto') applyTheme('auto');
+      });
+    });
+    </script>
   </body>
 </html>

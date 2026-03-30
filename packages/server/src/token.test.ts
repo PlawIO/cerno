@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SignJWT } from 'jose'
 import { generateToken, verifyToken } from './token.js'
 import { MemoryStore } from './store.js'
 
@@ -11,7 +12,6 @@ describe('token', () => {
         site_key: 'test-site',
         session_id: 'session-123',
         public_key_hash: 'abc123',
-        score: 0.85,
         challenge_id: 'challenge-456',
       },
       SECRET,
@@ -26,7 +26,8 @@ describe('token', () => {
       sessionId: 'session-123',
     })
     expect(result.valid).toBe(true)
-    expect(result.score).toBe(0.85)
+    // Score is stripped from JWT payload (B3)
+    expect(result.score).toBe(0)
   })
 
   it('rejects token with wrong secret', async () => {
@@ -35,7 +36,6 @@ describe('token', () => {
         site_key: 'test-site',
         session_id: 'session-123',
         public_key_hash: 'abc123',
-        score: 0.7,
         challenge_id: 'challenge-789',
       },
       SECRET,
@@ -56,7 +56,6 @@ describe('token', () => {
         site_key: 'test-site',
         session_id: 'session-123',
         public_key_hash: 'abc123',
-        score: 0.9,
         challenge_id: 'challenge-000',
       },
       SECRET,
@@ -78,7 +77,6 @@ describe('token', () => {
         site_key: 'test-site',
         session_id: 'session-123',
         public_key_hash: 'abc123',
-        score: 0.85,
         challenge_id: 'challenge-replay',
       },
       SECRET,
@@ -113,7 +111,6 @@ describe('token', () => {
         site_key: 'test-site',
         session_id: 'session-123',
         public_key_hash: 'abc123',
-        score: 0.8,
         challenge_id: 'challenge-exp',
       },
       SECRET,
@@ -125,5 +122,85 @@ describe('token', () => {
       sessionId: 'session-123',
     })
     expect(result.valid).toBe(false)
+  })
+
+  it('rejects token without type claim', async () => {
+    const secretKey = new TextEncoder().encode(SECRET)
+    const now = Math.floor(Date.now() / 1000)
+    const token = await new SignJWT({
+      site_key: 'test-site',
+      session_id: 'session-123',
+      public_key_hash: 'abc123',
+      challenge_id: 'challenge-notype',
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setJti(crypto.randomUUID())
+      .setIssuedAt(now)
+      .setExpirationTime(now + 60)
+      .sign(secretKey)
+
+    const result = await verifyToken(token, {
+      secret: SECRET,
+      sessionId: 'session-123',
+    })
+    expect(result.valid).toBe(false)
+    expect(result.error).toBe('invalid_token_type')
+  })
+
+  it('rejects probe-kind token', async () => {
+    const secretKey = new TextEncoder().encode(SECRET)
+    const now = Math.floor(Date.now() / 1000)
+    const token = await new SignJWT({
+      kind: 'probe-completion',
+      probe_id: 'probe-1',
+      site_key: 'test-site',
+      session_id: 'session-123',
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setJti(crypto.randomUUID())
+      .setIssuedAt(now)
+      .setExpirationTime(now + 60)
+      .sign(secretKey)
+
+    const result = await verifyToken(token, {
+      secret: SECRET,
+      sessionId: 'session-123',
+    })
+    expect(result.valid).toBe(false)
+    expect(result.error).toBe('invalid_token_type')
+  })
+
+  it('JTI consumption uses provided tokenTtlMs', async () => {
+    const store = new MemoryStore()
+    const ttlMs = 120_000
+    const token = await generateToken(
+      {
+        site_key: 'test-site',
+        session_id: 'session-123',
+        public_key_hash: 'abc123',
+        challenge_id: 'challenge-ttl',
+      },
+      SECRET,
+      ttlMs,
+    )
+
+    // Spy on store.consumeToken to verify the TTL passed through
+    let capturedTtl: number | undefined
+    const origConsumeToken = store.consumeToken.bind(store)
+    store.consumeToken = async (tokenId: string, ttl: number) => {
+      capturedTtl = ttl
+      return origConsumeToken(tokenId, ttl)
+    }
+
+    const result = await verifyToken(token, {
+      secret: SECRET,
+      sessionId: 'session-123',
+      store,
+      tokenTtlMs: ttlMs,
+    })
+    expect(result.valid).toBe(true)
+    expect(capturedTtl).toBe(120_000)
+
+    store.clear()
   })
 })

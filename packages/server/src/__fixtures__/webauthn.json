@@ -1,0 +1,42 @@
+{
+  "rpId": "localhost",
+  "origin": "http://localhost:47831",
+  "stableId": "stable-user",
+  "siteKey": "test-site",
+  "registrationChallenge": "ot_BYf7twjnOWdXdmWxpn2hjHtvFwDC7X3-JDrscGJU",
+  "authenticationChallenge": "7bRtsgulE-uFoeYTksWWRP-Giq_CA465C31lt8okRrY",
+  "registrationResponse": {
+    "authenticatorAttachment": "platform",
+    "clientExtensionResults": {
+      "credProps": {
+        "rk": true
+      }
+    },
+    "id": "9Yi0aiNlqoM2yJyFGPIRRXyib8ia4QrtocQsAXfAWPg",
+    "rawId": "9Yi0aiNlqoM2yJyFGPIRRXyib8ia4QrtocQsAXfAWPg",
+    "response": {
+      "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YViBSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NFAAAAAQECAwQFBgcIAQIDBAUGBwgAIPWItGojZaqDNsichRjyEUV8om_ImuEK7aHELAF3wFj4pAEBAycgBiFYIBtEKwfqpHxfczMC0VAUooNrtvAglg-S_wbpKp07AjTV",
+      "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NFAAAAAQECAwQFBgcIAQIDBAUGBwgAIPWItGojZaqDNsichRjyEUV8om_ImuEK7aHELAF3wFj4pAEBAycgBiFYIBtEKwfqpHxfczMC0VAUooNrtvAglg-S_wbpKp07AjTV",
+      "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoib3RfQllmN3R3am5PV2RYZG1XeHBuMmhqSHR2RndEQzdYMy1KRHJzY0dKVSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDc4MzEiLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+      "publicKey": "MCowBQYDK2VwAyEAG0QrB-qkfF9zMwLRUBSig2u28CCWD5L_BukqnTsCNNU",
+      "publicKeyAlgorithm": -8,
+      "transports": [
+        "internal"
+      ]
+    },
+    "type": "public-key"
+  },
+  "authenticationResponse": {
+    "authenticatorAttachment": "platform",
+    "clientExtensionResults": {},
+    "id": "9Yi0aiNlqoM2yJyFGPIRRXyib8ia4QrtocQsAXfAWPg",
+    "rawId": "9Yi0aiNlqoM2yJyFGPIRRXyib8ia4QrtocQsAXfAWPg",
+    "response": {
+      "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAg",
+      "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiN2JSdHNndWxFLXVGb2VZVGtzV1dSUC1HaXFfQ0E0NjVDMzFsdDhva1JyWSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDc4MzEiLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+      "signature": "DztEqWU6k18MY59s0W8_nupJ08UNlbsB_c3qSIMkq9j-biSN7FI1G5YrQODwSlVFf9mB18sLUQHpp26q4F8-Dw",
+      "userHandle": "c3RhYmxlLXVzZXI"
+    },
+    "type": "public-key"
+  }
+}

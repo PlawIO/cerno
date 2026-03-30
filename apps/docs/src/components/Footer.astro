@@ -1,0 +1,98 @@
+---
+import Pagination from 'virtual:starlight/components/Pagination';
+---
+
+<div class="docs-footer-wrapper">
+  <Pagination />
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-left">
+        <svg class="footer-mark" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="13" y1="3" x2="33" y2="3"/>
+            <line x1="33" y1="3" x2="33" y2="33"/>
+            <line x1="3" y1="33" x2="23" y2="33"/>
+            <line x1="3" y1="3" x2="3" y2="33"/>
+            <line x1="13" y1="13" x2="13" y2="23"/>
+            <line x1="23" y1="3" x2="23" y2="13"/>
+            <line x1="23" y1="23" x2="23" y2="33"/>
+            <line x1="13" y1="23" x2="23" y2="23"/>
+          </g>
+          <path d="M8 3 L8 8 L18 8 L18 18 L28 18 L28 28 L28 33" stroke="#2596be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="footer-name">Cerno</span>
+      </div>
+      <div class="footer-links">
+        <a href="/docs/getting-started/">Docs</a>
+        <a href="https://github.com/PlawIO/cerno" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://veto.so" target="_blank" rel="noopener">veto.so</a>
+      </div>
+      <div class="footer-right">
+        <span>Apache 2.0</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<style>
+  .docs-footer-wrapper {
+    padding-top: 1rem;
+  }
+
+  .site-footer {
+    border-top: 1px solid var(--cerno-border);
+    margin-top: 2rem;
+  }
+
+  .footer-inner {
+    max-width: 100%;
+    padding: 24px 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .footer-mark { width: 16px; height: 16px; color: var(--sl-color-gray-3); }
+
+  .footer-name {
+    font-family: var(--sl-font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--sl-color-gray-2);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+  }
+
+  .footer-links a {
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .footer-links a:hover { color: var(--cerno-ink); }
+
+  .footer-right {
+    font-size: 12px;
+    color: var(--sl-color-gray-3);
+    font-family: var(--sl-font-mono);
+  }
+
+  @media (max-width: 50rem) {
+    .footer-inner {
+      flex-direction: column;
+      text-align: center;
+      gap: 12px;
+    }
+  }
+</style>

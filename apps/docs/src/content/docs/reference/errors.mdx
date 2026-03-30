@@ -1,0 +1,70 @@
+---
+title: Error Codes
+description: All error codes returned by the Cerno verification API.
+---
+
+When verification fails, the API returns `{ success: false, error_code: "..." }` with an appropriate HTTP status.
+
+## Error codes
+
+| Code | HTTP | Meaning |
+|------|------|---------|
+| `challenge_not_found` | 400 | Unknown or already-consumed challenge ID |
+| `challenge_expired` | 410 | Challenge is older than 2 minutes |
+| `invalid_pow` | 400 | Proof of work didn't meet the difficulty requirement |
+| `invalid_path` | 400 | The submitted path doesn't solve the maze |
+| `behavioral_rejected` | 400 | Behavioral score below threshold |
+| `rate_limited` | 429 | Too many attempts from this session |
+| `invalid_request` | 400 | Malformed, oversized, or missing required fields |
+| `invalid_signature` | 400 | Missing or invalid ECDSA challenge signature |
+| `public_key_mismatch` | 400 | Submitted public key does not match the challenge binding |
+| `probe_failed` | 400 | Probe completion tokens were missing, invalid, replayed, expired, or incorrect |
+| `webauthn_failed` | 400 | Required WebAuthn assertion was missing or assertion verification failed |
+
+## Handling errors
+
+The React component maps these to user-facing messages and retries where appropriate. For token
+verification, check the `valid` field:
+
+```typescript
+const result = await verifyToken(token, options)
+
+if (!result.valid) {
+  // Token is invalid — require re-verification
+}
+```
+
+## Common scenarios
+
+### `challenge_expired`
+
+The user took longer than 2 minutes to complete the maze. The widget should automatically request a new challenge.
+
+### `behavioral_rejected`
+
+The behavioral score fell below the threshold (default 0.6). This can happen with:
+- Trackpad users who produce less jerk variance
+- Very fast completions on easy mazes
+- Unusual input devices
+
+Consider using calibration mode (threshold 0.3) during initial deployment to collect baseline data before tightening.
+
+### `rate_limited`
+
+A single server-derived client binding has made too many attempts. Default limit is 3 attempts per
+5-minute window.
+
+### `invalid_signature`
+
+The browser did not submit a valid signature over `challenge_id`, or the request omitted the
+ephemeral public key entirely.
+
+### `probe_failed`
+
+The probe step was required and failed. Causes include:
+
+- missing completion tokens
+- forged or replayed completion tokens
+- wrong tap target
+- completion after the server deadline
+- mismatched challenge/session binding

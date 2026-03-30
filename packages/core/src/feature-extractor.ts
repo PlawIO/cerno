@@ -89,6 +89,7 @@ export function extractFeatures(events: RawEvent[]): BehavioralFeatures {
       movement_onset_ms: 0,
       jerk_std: 0,
       angular_velocity_entropy: 0,
+      timing_cv: 0,
       sample_count: moveEvents.length,
       total_duration_ms: moveEvents.length > 0 ? moveEvents[moveEvents.length - 1].t - moveEvents[0].t : 0,
     }
@@ -105,6 +106,7 @@ export function extractFeatures(events: RawEvent[]): BehavioralFeatures {
       movement_onset_ms: events.length > 0 ? events[0].t : 0,
       jerk_std: 0,
       angular_velocity_entropy: 0,
+      timing_cv: 0,
       sample_count: sampled.length,
       total_duration_ms: 0,
     }
@@ -203,6 +205,24 @@ export function extractFeatures(events: RawEvent[]): BehavioralFeatures {
 
   const angular_velocity_entropy = shannonEntropy(angularVelocities, 16)
 
+  // ── Timing CV (coefficient of variation of inter-event intervals) ──
+  // Computed from RAW events (pre-resampling) to capture actual human timing.
+  // Resampled 60Hz grid has constant intervals, which would collapse CV to ~0.
+  // Humans produce log-normal timing (CV ~0.3-0.7). Bots produce
+  // constant (CV ~0) or uniform (CV ~0.577) timing.
+  const intervals: number[] = []
+  for (let i = 1; i < moveEvents.length; i++) {
+    const dt = moveEvents[i].t - moveEvents[i - 1].t
+    if (dt > 0) intervals.push(dt)
+  }
+  let timing_cv = 0
+  if (intervals.length >= 2) {
+    const meanInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
+    if (meanInterval > 0) {
+      timing_cv = std(intervals) / meanInterval
+    }
+  }
+
   const total_duration_ms = sampled[sampled.length - 1].t - sampled[0].t
 
   return {
@@ -212,6 +232,7 @@ export function extractFeatures(events: RawEvent[]): BehavioralFeatures {
     movement_onset_ms,
     jerk_std,
     angular_velocity_entropy,
+    timing_cv,
     sample_count: sampled.length,
     total_duration_ms,
   }

@@ -1,0 +1,192 @@
+---
+title: WebAuthn
+description: Full registration and assertion verification with stable identity binding.
+---
+
+WebAuthn in this repo is a real registration and assertion flow, not a structural stub. It is
+bound to your deployer-provided `stable_id`. The stock `Cerno` widget automatically performs
+authentication when the issued challenge includes `webauthn_request_options`. Registration remains
+an explicit app flow you run before challenge verification.
+
+## How it fits the challenge flow
+
+1. Your app registers a credential for a `stable_id` by calling:
+   - `POST /webauthn/register/options`
+   - `navigator.credentials.create()`
+   - `POST /webauthn/register/verify`
+2. Later, your client requests a challenge with that same `stable_id`.
+3. `createChallenge()` includes `webauthn_request_options` when the `stable_id` has registered credentials and the client says WebAuthn is available.
+4. The stock `Cerno` component automatically calls `navigator.credentials.get()` and includes the assertion in `request.webauthn`.
+5. `validateSubmission()` verifies RP ID, origin, challenge, signature, user verification, and sign counter before accepting the solve.
+
+## Browser support
+
+Platform authenticator support is required. This covers:
+
+- macOS / iOS: Touch ID, Face ID
+- Windows: Windows Hello
+- Android: fingerprint or face unlock
+- Linux: depends on FIDO2 hardware keys and browser support
+
+Headless browsers and most automation environments cannot satisfy this unless you use a virtual
+authenticator in tests.
+
+## Client API
+
+Both functions are exported from `@cernosh/react`.
+
+```bash
+npm install @cernosh/react
+```
+
+### `isWebAuthnAvailable()`
+
+Checks whether the current environment supports a user-verifying platform authenticator.
+
+```typescript
+import { isWebAuthnAvailable } from '@cernosh/react'
+
+const available = await isWebAuthnAvailable()
+```
+
+### `requestWebAuthnRegistration(options)`
+
+Starts credential creation from the server-issued registration options.
+
+```typescript
+import { requestWebAuthnRegistration } from '@cernosh/react'
+
+const credential = await requestWebAuthnRegistration(registrationOptions)
+if (credential) {
+  await fetch('/webauthn/register/verify', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id,
+      response: credential,
+    }),
+  })
+}
+```
+
+### `requestWebAuthnAuthentication(options)`
+
+Requests an assertion from the platform authenticator. Returns the browser JSON payload or `null`
+if unavailable or declined.
+
+```typescript
+import { requestWebAuthnAuthentication } from '@cernosh/react'
+
+const assertion = await requestWebAuthnAuthentication(challenge.webauthn_request_options!)
+
+if (assertion) {
+  request.webauthn = assertion
+}
+```
+
+The returned object is `AuthenticationResponseJSON`-compatible and includes:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Identifier for the credential used |
+| `response.authenticatorData` | Authenticator state including RP ID hash, flags, and sign counter |
+| `response.clientDataJSON` | Client context including challenge and origin |
+| `response.signature` | Cryptographic signature over the assertion |
+| `response.userHandle` | Optional user handle returned by the authenticator |
+
+The stock widget uses this automatically when the challenge includes
+`webauthn_request_options`.
+
+### `requestWebAuthnAttestation(challengeId, rpId)`
+
+This legacy helper still exists as a compatibility wrapper around
+`requestWebAuthnAuthentication()`. New code should use the explicit registration and authentication
+helpers above.
+
+## Server API
+
+Registration and assertion verification are exported from `@cernosh/server` and are also invoked
+inside the worker routes and `validateSubmission()`.
+
+```bash
+npm install @cernosh/server
+```
+
+### `beginWebAuthnRegistration(config, request)`
+
+Creates browser-safe registration options and stores a short-lived registration session.
+
+```typescript
+import { beginWebAuthnRegistration } from '@cernosh/server'
+
+const result = await beginWebAuthnRegistration(config, {
+  site_key: 'your-site-key',
+  stable_id: 'user-123',
+})
+```
+
+### `completeWebAuthnRegistration(config, request)`
+
+Consumes the registration session, verifies the browser response, and stores the credential.
+
+```typescript
+import { completeWebAuthnRegistration } from '@cernosh/server'
+
+const result = await completeWebAuthnRegistration(config, {
+  session_id,
+  response: registrationResponse,
+})
+```
+
+### `verifyWebAuthnAuthentication(config, siteKey, stableId, expectedChallenge, response)`
+
+Verifies a real authentication assertion against the stored credential.
+
+```typescript
+import { verifyWebAuthnAuthentication } from '@cernosh/server'
+
+const result = await verifyWebAuthnAuthentication(
+  config,
+  'your-site-key',
+  'user-123',
+  challenge.webauthn_request_options!.challenge,
+  submission.webauthn!,
+)
+```
+
+The verification checks:
+
+1. RP ID
+2. Origin
+3. Challenge binding
+4. Signature against the stored credential public key
+5. User verification
+6. Credential ownership for the `stable_id`
+7. Sign-counter monotonicity
+
+## Server config
+
+```typescript
+const config = {
+  secret: process.env.CERNO_SECRET!,
+  store,
+  webAuthn: {
+    mode: 'required',
+    rpId: 'example.com',
+    expectedOrigin: 'https://example.com',
+  },
+}
+```
+
+## Practical caveats
+
+- `stable_id` is required for WebAuthn. The core packages do not invent one for you.
+- The stock widget performs authentication, not registration.
+- `production` mode rejects WebAuthn if the configured store cannot persist registration sessions,
+  credentials, and sign-counter updates.
+
+```typescript
+import { validateSubmission } from '@cernosh/server'
+
+const result = await validateSubmission(config, submission)
+if (!result.success) return { error: result.error_code }
+```

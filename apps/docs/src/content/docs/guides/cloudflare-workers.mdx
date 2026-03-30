@@ -1,0 +1,219 @@
+---
+title: Cloudflare Workers
+description: Deploy the in-repo verification API to Cloudflare Workers with Durable Objects for authoritative state.
+---
+
+The `apps/worker` app is an edge-hosted verification API. In production it should run with the
+`CERNO_STATE` Durable Objects binding. Workers KV remains as a weak fallback for demos and local
+integration.
+
+## What ships in the worker
+
+| Route | Purpose |
+|-------|---------|
+| `POST /challenge` | Create a challenge for a site key |
+| `POST /probe/arm` | Arm a probe when the client reaches a trigger cell |
+| `POST /probe/complete` | Complete an armed probe and mint a completion token |
+| `POST /verify` | Validate the full widget submission |
+| `POST /webauthn/register/options` | Start WebAuthn credential registration |
+| `POST /webauthn/register/verify` | Verify registration and persist the credential |
+| `POST /siteverify` | Server-to-server token verification |
+
+## Configure Durable Objects, KV, and the worker
+
+```toml
+name = "cerno-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "CERNO_KV"
+id = "your-kv-namespace-id"
+
+[[durable_objects.bindings]]
+name = "CERNO_STATE"
+class_name = "CernoStateShard"
+```
+
+The repo already includes [`wrangler.toml`](https://github.com/PlawIO/cerno/blob/main/apps/worker/wrangler.toml).
+Replace the namespace IDs and keep the `CERNO_STATE` binding in place for production.
+
+## Required secret
+
+```bash
+cd apps/worker
+wrangler secret put CERNO_SECRET
+```
+
+Generate a strong value with `openssl rand -hex 32`.
+
+## Optional environment flags
+
+| Variable | Effect |
+|----------|--------|
+| <code>CERNO_MODE=development&#124;test&#124;production</code> | Controls strict config validation. `production` requires Durable Objects or another strong store. |
+| `CERNO_ENABLE_PROBES=true` | Enables Stroop probe injection |
+| `CERNO_ADAPTIVE_POW=true` | Enables adaptive proof-of-work difficulty |
+| <code>CERNO_WEBAUTHN_MODE=off&#124;preferred&#124;required</code> | Enables WebAuthn verification in issued challenges |
+| `CERNO_WEBAUTHN_RP_ID=example.com` | RP ID for WebAuthn verification |
+| `CERNO_WEBAUTHN_ORIGIN=https://example.com` | Expected origin for WebAuthn verification |
+| `CERNO_SITEVERIFY_AUTH_TOKEN=...` | Requires `Authorization: Bearer ...` on `/siteverify` |
+
+## Deploy
+
+```bash
+wrangler deploy
+```
+
+Your API is now live at `https://cerno-api.<your-subdomain>.workers.dev`.
+
+Point the React widget at that base URL:
+
+```tsx
+<Cerno
+  siteKey="your-site-key"
+  sessionId={session.id}
+  apiUrl="https://cerno-api.<your-subdomain>.workers.dev"
+  onVerify={handleVerify}
+/>
+```
+
+## Endpoint contract
+
+### `POST /challenge`
+
+Request:
+
+```json
+{
+  "site_key": "your-site-key",
+  "stable_id": "user-123",
+  "client_capabilities": {
+    "reduced_motion": false,
+    "webauthn_available": true,
+    "pointer_types": ["mouse"]
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": "challenge-uuid",
+  "challenge_type": "maze",
+  "maze_seed": 12345,
+  "maze_width": 8,
+  "maze_height": 8,
+  "maze_difficulty": 0.6,
+  "pow_challenge": "hex-string",
+  "pow_difficulty": 18,
+  "site_key": "your-site-key",
+  "created_at": 1711728000000,
+  "expires_at": 1234567890,
+  "requirements": {
+    "probe": { "mode": "off", "required_completion_count": 0 },
+    "webauthn": { "mode": "preferred" }
+  },
+  "webauthn_request_options": {
+    "challenge": "base64url",
+    "rpId": "example.com",
+    "userVerification": "required"
+  }
+}
+```
+
+### `POST /probe/arm`
+
+Request:
+
+```json
+{
+  "challenge_id": "challenge-uuid",
+  "site_key": "your-site-key",
+  "session_id": "session-123",
+  "probe_id": "probe-1",
+  "events": [{ "t": 0, "x": 0.1, "y": 0.1, "type": "down" }]
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "armed_at": 1711728001234,
+  "deadline_at": 1711728006234
+}
+```
+
+### `POST /probe/complete`
+
+Request:
+
+```json
+{
+  "challenge_id": "challenge-uuid",
+  "session_id": "session-123",
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "tapped_cell": { "x": 4, "y": 2 }
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "completion_token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+### `POST /verify`
+
+Accepts the full widget submission: raw events, PoW proof, public key, signature, optional
+`stable_id`, optional WebAuthn assertion, and `probe_completion_tokens` when probes were required.
+
+Response (success):
+
+```json
+{ "success": true, "token": "eyJ..." }
+```
+
+Response (failure):
+
+```json
+{ "success": false, "error_code": "behavioral_rejected", "score": 0 }
+```
+
+### `POST /siteverify`
+
+Request:
+
+```json
+{
+  "token": "eyJ...",
+  "session_id": "session-123"
+}
+```
+
+If `CERNO_SITEVERIFY_AUTH_TOKEN` is configured, callers must also send
+`Authorization: Bearer <token>`.
+
+## Custom domain
+
+Point `api.cerno.sh` (or your preferred subdomain) to the Worker via Cloudflare DNS. Add the
+custom domain in your Worker's settings.
+
+## Storage
+
+Authoritative production state lives in Durable Objects:
+
+- challenges: atomic consume
+- consumed tokens: atomic single-use enforcement
+- rate limits: consistent counters
+- probe arm sessions: short-lived authoritative timing state
+- WebAuthn credentials: credential storage and sign-counter updates
+
+Workers KV remains as a fallback adapter for demos and staging only.

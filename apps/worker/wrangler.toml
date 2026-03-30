@@ -2,7 +2,23 @@ name = "cerno-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
+[vars]
+CERNO_BASE_URL = "https://api.cerno.sh"
+GITHUB_CLIENT_ID = "Ov23liOBRGns88TfaMCs"
+
+[[routes]]
+pattern = "api.cerno.sh/*"
+zone_name = "cerno.sh"
+
 [[kv_namespaces]]
 binding = "CERNO_KV"
 id = "d22c19ad9db1485196d79e3cce159e43"
 preview_id = "a27022eb296b4efc81499210ad4df658"
+
+[[durable_objects.bindings]]
+name = "CERNO_STATE"
+class_name = "CernoStateShard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CernoStateShard"]

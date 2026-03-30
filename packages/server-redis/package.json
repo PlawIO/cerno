@@ -1,0 +1,35 @@
+{
+  "name": "@cernosh/server-redis",
+  "version": "0.1.0",
+  "description": "Redis-backed production CaptchaStore adapter for Cerno",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PlawIO/cerno.git",
+    "directory": "packages/server-redis"
+  },
+  "homepage": "https://cerno.sh",
+  "keywords": ["captcha", "redis", "store", "anti-bot"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "dev": "tsup src/index.ts --format esm --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@cernosh/server": "^0.1.0",
+    "ioredis": "^5.4.2"
+  }
+}

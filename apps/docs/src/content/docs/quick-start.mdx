@@ -1,0 +1,130 @@
+---
+title: Quick Start
+description: Minimum working integration with the current React and server packages.
+---
+
+Wire the widget, expose two endpoints, and verify the returned token before a sensitive action.
+The React package handles challenge fetch, proof-of-work, key generation, signing, maze
+interaction, and submission.
+
+## Install
+
+```bash
+npm install @cernosh/react @cernosh/server
+```
+
+## 1. Mount the widget
+
+Drop the widget into the protected view or form:
+
+```tsx
+import { Cerno } from '@cernosh/react'
+
+function ProtectedPage() {
+  return (
+    <Cerno
+      siteKey="your-site-key"
+      sessionId={session.id}
+      apiUrl="/api/captcha"
+      onVerify={(token) => submitWithToken(token)}
+    />
+  )
+}
+```
+
+The component will call:
+
+- `POST /api/captcha/challenge`
+- `POST /api/captcha/verify`
+
+If you deploy the standalone worker instead, set `apiUrl` to the worker base URL, for example:
+`https://cerno-api.example.workers.dev`.
+
+## 2. Expose challenge and verify routes
+
+These two routes match the payload shape used by the current widget:
+
+```typescript
+import { createChallenge, validateSubmission, verifyToken } from '@cernosh/server'
+import { MemoryStore } from '@cernosh/server'
+
+const config = {
+  secret: process.env.CERNO_SECRET!,
+  store: new MemoryStore(), // development/test only
+  enableSecretFeatures: true,
+}
+
+app.post('/api/captcha/challenge', async (req, res) => {
+  const challenge = await createChallenge(config, {
+    site_key: req.body.site_key,
+    stable_id: req.body.stable_id,
+    client_capabilities: req.body.client_capabilities,
+  })
+  res.json(challenge)
+})
+
+app.post('/api/captcha/verify', async (req, res) => {
+  const result = await validateSubmission(config, req.body)
+  if (result.success) {
+    // Keep score server-side. The public success response only needs the token.
+    const { score: _, ...response } = result
+    return res.json(response)
+  }
+
+  return res.status(400).json(result)
+})
+```
+
+## 3. Gate your sensitive route with `verifyToken`
+
+```typescript
+app.post('/api/sensitive-action', async (req, res) => {
+  const verified = await verifyToken(req.body.cerno_token, {
+    secret: process.env.CERNO_SECRET!,
+    sessionId: req.session.id,
+    store: config.store,
+  })
+
+  if (!verified.valid) {
+    return res.status(403).json({ error: 'Human verification required' })
+  }
+
+  // perform the action
+})
+```
+
+## Request shape, at a glance
+
+The widget submits a payload like this to `/verify`:
+
+```json
+{
+  "challenge_id": "uuid",
+  "site_key": "your-site-key",
+  "session_id": "session-123",
+  "maze_seed": 12345,
+  "events": [{ "t": 0, "x": 0.12, "y": 0.14, "type": "down" }],
+  "pow_proof": { "nonce": 48291, "hash": "00ab..." },
+  "public_key": "base64-jwk",
+  "signature": "base64-signature",
+  "timestamp": 1711728001234
+}
+```
+
+Optional fields include `probe_completion_tokens`, `input_type`, `stable_id`, `cell_size`,
+`rate_limit_binding`, and `webauthn`. Full details are in [Challenge API](/docs/reference/api/).
+
+## Edge deployment
+
+For demos or staging, use the pre-built Cloudflare Worker:
+
+```bash
+cd apps/worker
+wrangler secret put CERNO_SECRET
+wrangler deploy
+```
+
+See [Cloudflare Workers](/docs/guides/cloudflare-workers/) for the current worker contract and environment flags.
+
+`MemoryStore` is not production-safe. Use Durable Objects in the Cloudflare worker or
+`@cernosh/server-redis` for portable production storage.

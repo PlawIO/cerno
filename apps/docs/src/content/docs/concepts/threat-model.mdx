@@ -1,0 +1,58 @@
+---
+title: Threat Model
+description: Who Cerno is designed to stop, and what the attacker looks like.
+---
+
+Cerno is designed specifically for **AI browser agents** — not mass bots. This changes the design significantly.
+
+## The attacker
+
+The threat is not a traditional botnet. It's an AI agent using a real browser:
+
+- **Playwright / Puppeteer** automation
+- **Claude Computer Use** (Anthropic)
+- **browser-use** (open-source agent framework)
+- **Operator** (OpenAI)
+- **Stagehand** and similar agent toolkits
+
+These agents can:
+- Solve visual puzzles (image recognition, OCR)
+- Recognize and click UI elements
+- Type text, check boxes, identify traffic lights
+- Read and understand page content
+- Replay recorded human sessions
+
+## What they can't do (yet)
+
+- Produce human-like jerk dynamics from motor control
+- Replicate micro-corrections and hesitations of human hand movement
+- Fake the statistical distribution of human behavioral features without access to the scoring algorithm
+- Maintain consistent behavioral profiles across multiple attempts
+
+## Design implications
+
+### The maze is a Trojan horse
+
+The visible challenge (solve the maze) is not the real test. It's a delivery mechanism for collecting behavioral data. The maze forces the user to produce a continuous stream of pointer events with direction changes, pauses at decision points, and varying speeds.
+
+### Behavioral layer is the verdict
+
+The PoW layer is economic defense against scale. The maze layer is spatial reasoning. But the behavioral layer is what actually distinguishes human from agent.
+
+### Server-side re-extraction
+
+All 6 behavioral features are re-computed server-side from the raw event stream. The client sends coordinates and timestamps; the server derives everything else. The client cannot submit pre-computed features.
+
+### No ML on the hot path
+
+The scoring uses deterministic statistical thresholds. This means:
+- **Auditable**: you can inspect exactly why a score was assigned
+- **Predictable**: same input always produces same output
+- **Fast**: sub-50ms server validation, no inference latency
+- **Transparent**: no black-box model making opaque decisions
+
+## What Cerno is NOT
+
+- **Not a bot detection service.** It doesn't fingerprint browsers, check IP reputation, or analyze request patterns.
+- **Not a rate limiter.** It has per-session rate limiting, but that's a defense mechanism, not the core product.
+- **Not ML-based.** There's no model to retrain, no data pipeline to maintain, no inference cost.

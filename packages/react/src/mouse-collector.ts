@@ -8,9 +8,11 @@ export interface MouseCollector {
 }
 
 export function createMouseCollector(canvas: HTMLCanvasElement): MouseCollector {
-  const events: RawEvent[] = []
+  const events: Array<RawEvent & { pointer_type?: 'mouse' | 'touch' | 'pen' }> = []
   let startTime = -1
   let active = false
+  let lastMoveTime = -1
+  const MOVE_INTERVAL_MS = 33 // ~30Hz
 
   function normalize(e: PointerEvent): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect()
@@ -25,10 +27,16 @@ export function createMouseCollector(canvas: HTMLCanvasElement): MouseCollector 
     const now = performance.now()
     if (startTime < 0) startTime = now
     const { x, y } = normalize(e)
-    events.push({ t: now - startTime, x, y, type })
+    const pointerType = e.pointerType === 'mouse' || e.pointerType === 'touch' || e.pointerType === 'pen'
+      ? e.pointerType
+      : undefined
+    events.push({ t: now - startTime, x, y, type, pointer_type: pointerType })
   }
 
   function onPointerMove(e: PointerEvent): void {
+    const now = e.timeStamp || performance.now()
+    if (now - lastMoveTime < MOVE_INTERVAL_MS) return
+    lastMoveTime = now
     record(e, 'move')
   }
 
@@ -62,6 +70,7 @@ export function createMouseCollector(canvas: HTMLCanvasElement): MouseCollector 
     reset() {
       events.length = 0
       startTime = -1
+      lastMoveTime = -1
     },
   }
 }

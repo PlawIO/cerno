@@ -2,13 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   Challenge,
   Maze,
+  ProbeResponse,
   RawEvent,
+  StroopProbe,
   ValidationRequest,
   ValidationResult,
 } from '@cernosh/core'
 import { extractFeatures, generateMaze, RENDERING } from '@cernosh/core'
 import { MazeCanvas } from './MazeCanvas.js'
-import { generateEphemeralKeyPair } from './crypto-binding.js'
+import { StroopOverlay } from './StroopOverlay.js'
+import { generateEphemeralKeyPair, signChallenge } from './crypto-binding.js'
+import { isWebAuthnAvailable, requestWebAuthnAuthentication } from './webauthn.js'
 
 // ── PoW helpers ──
 
@@ -145,11 +149,85 @@ ctx.addEventListener('message', (e) => { solve(e.data.challenge, e.data.difficul
   }
 }
 
+// ── Design tokens ──
+
+function getCernoTokenCSS(theme: 'light' | 'dark'): string {
+  const lightTokens = `
+[data-cerno-theme="light"] {
+  --cerno-font: 'Geist', system-ui, -apple-system, sans-serif;
+  --cerno-accent: #2dd4bf;
+  --cerno-accent-deep: #14b8a6;
+  --cerno-fg: #1a1a17;
+  --cerno-secondary: #44403b;
+  --cerno-muted: #78716c;
+  --cerno-border: #e7e5e4;
+  --cerno-surface: #fafaf9;
+  --cerno-bg: #ffffff;
+  --cerno-radius: 2px;
+  --cerno-success: #22c55e;
+  --cerno-error: #ef4444;
+  --cerno-warning: #f59e0b;
+}`
+
+  const darkTokens = `
+[data-cerno-theme="dark"] {
+  --cerno-font: 'Geist', system-ui, -apple-system, sans-serif;
+  --cerno-accent: #2dd4bf;
+  --cerno-accent-deep: #14b8a6;
+  --cerno-fg: #e7e5e4;
+  --cerno-secondary: #a8a29e;
+  --cerno-muted: #78716c;
+  --cerno-border: #44403b;
+  --cerno-surface: #1c1917;
+  --cerno-bg: #0c0a09;
+  --cerno-radius: 2px;
+  --cerno-success: #22c55e;
+  --cerno-error: #ef4444;
+  --cerno-warning: #f59e0b;
+}`
+
+  if (theme === 'dark') return `${lightTokens}\n${darkTokens}`
+  return `${lightTokens}\n${darkTokens}`
+}
+
+// ── Error messages (E6) ──
+
+const ERROR_MESSAGES: Record<string, string> = {
+  CHALLENGE_NOT_FOUND: 'This challenge has expired. Loading a new one...',
+  CHALLENGE_EXPIRED: 'This challenge has expired. Loading a new one...',
+  RATE_LIMITED: 'Too many attempts. Please wait a moment.',
+  INVALID_POW: 'Verification error. Please try again.',
+  PROBE_FAILED: "Quick check wasn't quite right. Try again?",
+  SCORE_TOO_LOW: 'Almost! Please try once more.',
+  INVALID_SIGNATURE: 'Verification error. Please try again.',
+  SITE_KEY_MISMATCH: 'Configuration error. Please contact site admin.',
+  PUBLIC_KEY_MISMATCH: 'Session error. Please try again.',
+  // lowercase variants from ErrorCode const
+  challenge_expired: 'This challenge has expired. Loading a new one...',
+  challenge_not_found: 'This challenge has expired. Loading a new one...',
+  rate_limited: 'Too many attempts. Please wait a moment.',
+  invalid_pow: 'Verification error. Please try again.',
+  probe_failed: "Quick check wasn't quite right. Try again?",
+  invalid_signature: 'Verification error. Please try again.',
+  public_key_mismatch: 'Session error. Please try again.',
+  behavioral_rejected: 'Almost! Please try once more.',
+  invalid_path: 'Path was not quite right. Please try again.',
+  invalid_request: 'Something went wrong. Please try again.',
+}
+
+function friendlyError(code?: string, fallback?: string): string {
+  if (code && ERROR_MESSAGES[code]) return ERROR_MESSAGES[code]
+  if (fallback?.includes('fetch') || fallback?.includes('network') || fallback?.includes('Network'))
+    return 'Connection issue. Check your connection and try again.'
+  return fallback ?? 'Something went wrong. Please try again.'
+}
+
 // ── Types ──
 
 export interface CernoProps {
   siteKey: string
   sessionId: string
+  stableId?: string
   onVerify: (token: string) => void
   onError?: (error: Error) => void
   onExpire?: () => void
@@ -162,6 +240,7 @@ type CaptchaState =
   | 'loading'
   | 'ready'
   | 'solving'
+  | 'probe'
   | 'submitting'
   | 'verified'
   | 'failed'
@@ -169,12 +248,61 @@ type CaptchaState =
 
 const MAX_ATTEMPTS = 3
 const CHALLENGE_TTL_MS = 2 * 60 * 1000
+type ChallengeWithRequirements = Challenge & {
+  requirements?: {
+    probe: {
+      mode: 'off' | 'required'
+      required_completion_count: number
+    }
+    webauthn: {
+      mode: 'off' | 'preferred' | 'required'
+    }
+  }
+}
+
+function buildChallengeBindingPayload(challenge: Challenge): string {
+  return `${challenge.id}:${challenge.site_key}:${challenge.expires_at}`
+}
+
+function extractLatestPointerAttempt(events: RawEvent[]): RawEvent[] {
+  let lastDownIdx = -1
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type === 'down') {
+      lastDownIdx = i
+      break
+    }
+  }
+  if (lastDownIdx === -1) return events
+  return events.slice(lastDownIdx)
+}
+
+async function collectClientCapabilities(): Promise<{
+  reduced_motion: boolean
+  webauthn_available: boolean
+  pointer_types: Array<'mouse' | 'touch' | 'pen'>
+}> {
+  const reducedMotion = typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const pointerTypes = new Set<'mouse' | 'touch' | 'pen'>()
+  if (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) {
+    pointerTypes.add('touch')
+  }
+  if (typeof window !== 'undefined' && window.matchMedia('(pointer:fine)').matches) {
+    pointerTypes.add('mouse')
+  }
+  return {
+    reduced_motion: reducedMotion,
+    webauthn_available: await isWebAuthnAvailable(),
+    pointer_types: Array.from(pointerTypes),
+  }
+}
 
 // ── Component ──
 
 export function Cerno({
   siteKey,
   sessionId,
+  stableId,
   onVerify,
   onError,
   onExpire,
@@ -187,9 +315,20 @@ export function Cerno({
   const [maze, setMaze] = useState<Maze | null>(null)
   const [attempts, setAttempts] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
+  const [activeProbe, setActiveProbe] = useState<StroopProbe | null>(null)
+  const [expiryWarning, setExpiryWarning] = useState(false)
+  const [lockoutRemaining, setLockoutRemaining] = useState(0)
+  const probeCompletionTokensRef = useRef<string[]>([])
+  const completedProbeIdsRef = useRef<Set<string>>(new Set())
+  const activeProbeTicketRef = useRef<string | null>(null)
+  const armingProbeIdRef = useRef<string | null>(null)
 
+  const keyPairRef = useRef<{ publicKeyBase64: string; privateKey: CryptoKey } | null>(null)
+  const keyPairPromiseRef = useRef<Promise<{ publicKeyBase64: string; privateKey: CryptoKey }> | null>(null)
   const powRef = useRef<{ promise: Promise<PowResult>; cancel: () => void } | null>(null)
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lockoutTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -199,10 +338,21 @@ export function Cerno({
     }
   }, [])
 
+  // Generate ECDSA keypair on mount so it's available at challenge time
+  useEffect(() => {
+    const p = generateEphemeralKeyPair()
+    keyPairPromiseRef.current = p
+    p.then(kp => { keyPairRef.current = kp })
+  }, [])
+
   const clearExpiry = useCallback(() => {
     if (expiryTimerRef.current !== null) {
       clearTimeout(expiryTimerRef.current)
       expiryTimerRef.current = null
+    }
+    if (warningTimerRef.current !== null) {
+      clearTimeout(warningTimerRef.current)
+      warningTimerRef.current = null
     }
   }, [])
 
@@ -212,12 +362,24 @@ export function Cerno({
 
     setState('loading')
     setErrorMsg('')
+    setExpiryWarning(false)
 
     try {
+      // Ensure keypair is ready before requesting challenge (F3 race fix)
+      if (keyPairPromiseRef.current) {
+        const kp = await keyPairPromiseRef.current
+        keyPairRef.current = kp
+      }
+      const clientCapabilities = await collectClientCapabilities()
       const res = await fetch(`${apiUrl}/challenge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ site_key: siteKey }),
+        body: JSON.stringify({
+          site_key: siteKey,
+          stable_id: stableId,
+          public_key: keyPairRef.current?.publicKeyBase64,
+          client_capabilities: clientCapabilities,
+        }),
       })
 
       if (!res.ok) {
@@ -228,6 +390,11 @@ export function Cerno({
       if (!mountedRef.current) return
 
       setChallenge(ch)
+      setActiveProbe(null)
+      activeProbeTicketRef.current = null
+      armingProbeIdRef.current = null
+      probeCompletionTokensRef.current = []
+      completedProbeIdsRef.current = new Set()
 
       // Generate maze from seed (dimensions and difficulty come from server challenge)
       const m = generateMaze({
@@ -247,9 +414,19 @@ export function Cerno({
       const ttl = ch.expires_at - Date.now()
       const timeoutMs = ttl > 0 ? Math.min(ttl, CHALLENGE_TTL_MS) : CHALLENGE_TTL_MS
 
+      // E2: warning timer at ttl - 30s
+      const warningMs = Math.max(0, timeoutMs - 30000)
+      if (warningMs > 0) {
+        warningTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setExpiryWarning(true)
+        }, warningMs)
+      }
+
       expiryTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return
         powRef.current?.cancel()
+        setExpiryWarning(false)
+        setErrorMsg('Challenge expired, loading new one...')
         setState('loading')
         onExpire?.()
         // Auto-fetch new challenge
@@ -259,7 +436,7 @@ export function Cerno({
       if (!mountedRef.current) return
       const error = err instanceof Error ? err : new Error(String(err))
       setState('failed')
-      setErrorMsg(error.message)
+      setErrorMsg(friendlyError(undefined, error.message))
       onError?.(error)
     }
   }, [apiUrl, siteKey, size, clearExpiry, onError, onExpire])
@@ -270,34 +447,52 @@ export function Cerno({
     return () => {
       clearExpiry()
       powRef.current?.cancel()
+      if (lockoutTimerRef.current !== null) {
+        clearInterval(lockoutTimerRef.current)
+        lockoutTimerRef.current = null
+      }
     }
   }, [fetchChallenge, clearExpiry])
 
-  const handlePathComplete = useCallback(
+  // Submit the validation request (after maze + optional probes)
+  const submitValidation = useCallback(
     async (events: RawEvent[]) => {
       if (!challenge || !maze) return
       setState('submitting')
 
       try {
-        // Wait for PoW to finish
         const pow = await powRef.current!.promise
-
-        // Extract behavioral features (for debugging/logging; server re-extracts)
         extractFeatures(events)
 
-        // Generate ephemeral key pair
-        const keyPair = await generateEphemeralKeyPair()
+        const keyPair = keyPairRef.current
+        if (!keyPair) throw new Error('Keypair not ready')
+        const signature = await signChallenge(buildChallengeBindingPayload(challenge), keyPair.privateKey)
+        const webauthn =
+          challenge.webauthn_request_options
+            ? await requestWebAuthnAuthentication(challenge.webauthn_request_options)
+            : null
+        if (
+          (challenge as ChallengeWithRequirements).requirements?.webauthn.mode === 'required'
+          && !webauthn
+        ) {
+          throw new Error('WebAuthn authentication required')
+        }
 
         const request: ValidationRequest = {
           challenge_id: challenge.id,
           site_key: siteKey,
           session_id: sessionId,
-          maze_seed: challenge.maze_seed,
           events,
           pow_proof: pow,
           public_key: keyPair.publicKeyBase64,
+          signature,
           timestamp: Date.now(),
-          cell_size: size === 'compact' ? 28 : RENDERING.CELL_SIZE,
+          stable_id: stableId,
+          probe_completion_tokens:
+            probeCompletionTokensRef.current.length > 0
+              ? [...probeCompletionTokensRef.current]
+              : undefined,
+          webauthn: webauthn ?? undefined,
         }
 
         const res = await fetch(`${apiUrl}/verify`, {
@@ -306,11 +501,12 @@ export function Cerno({
           body: JSON.stringify(request),
         })
 
-        if (!res.ok) {
+        let result: ValidationResult
+        try {
+          result = await res.json()
+        } catch {
           throw new Error(`Verification request failed: ${res.status}`)
         }
-
-        const result: ValidationResult = await res.json()
         if (!mountedRef.current) return
 
         if (result.success && result.token) {
@@ -324,11 +520,22 @@ export function Cerno({
           if (nextAttempts >= MAX_ATTEMPTS) {
             setState('locked')
             clearExpiry()
-            setErrorMsg('Too many failed attempts. Please try again later.')
+            setLockoutRemaining(120)
+            lockoutTimerRef.current = setInterval(() => {
+              setLockoutRemaining(prev => {
+                if (prev <= 1) {
+                  clearInterval(lockoutTimerRef.current!)
+                  lockoutTimerRef.current = null
+                  fetchChallenge()
+                  setAttempts(0)
+                  return 0
+                }
+                return prev - 1
+              })
+            }, 1000)
           } else {
             setState('failed')
-            setErrorMsg(result.error_code ?? 'Verification failed. Try again.')
-            // Auto-fetch new challenge for retry
+            setErrorMsg(friendlyError(result.error_code))
             fetchChallenge()
           }
         }
@@ -336,28 +543,115 @@ export function Cerno({
         if (!mountedRef.current) return
         const error = err instanceof Error ? err : new Error(String(err))
         setState('failed')
-        setErrorMsg(error.message)
+        setErrorMsg(friendlyError(undefined, error.message))
         onError?.(error)
       }
     },
-    [challenge, maze, siteKey, sessionId, apiUrl, attempts, clearExpiry, onVerify, onError, fetchChallenge],
+    [challenge, maze, siteKey, sessionId, stableId, apiUrl, size, attempts, clearExpiry, onVerify, onError, fetchChallenge],
+  )
+
+  // Handle probe completion
+  const handleProbeComplete = useCallback(
+    async (response: ProbeResponse) => {
+      if (!challenge || !activeProbeTicketRef.current) return
+
+      const res = await fetch(`${apiUrl}/probe/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challenge_id: challenge.id,
+          session_id: sessionId,
+          probe_ticket: activeProbeTicketRef.current,
+          tapped_cell: response.tapped_cell,
+        }),
+      })
+      const result = await res.json() as { success?: boolean; completion_token?: string; error?: string }
+      if (!mountedRef.current) return
+
+      if (!result.success || !result.completion_token) {
+        setState('failed')
+        setErrorMsg(friendlyError('probe_failed', result.error))
+        fetchChallenge()
+        return
+      }
+
+      probeCompletionTokensRef.current.push(result.completion_token)
+      completedProbeIdsRef.current.add(response.probe_id)
+      activeProbeTicketRef.current = null
+      armingProbeIdRef.current = null
+      setActiveProbe(null)
+      setState('ready')
+    },
+    [apiUrl, challenge, fetchChallenge, sessionId],
+  )
+
+  const handleCellVisit = useCallback(
+    async (cell: { x: number; y: number }, events: RawEvent[]) => {
+      if (!challenge || state === 'probe' || state === 'submitting') return
+      const nextProbe = challenge.probes?.find(
+        (probe) =>
+          probe.trigger_cell.x === cell.x &&
+          probe.trigger_cell.y === cell.y &&
+          !completedProbeIdsRef.current.has(probe.id) &&
+          armingProbeIdRef.current !== probe.id,
+      )
+      if (!nextProbe) return
+
+      armingProbeIdRef.current = nextProbe.id
+      setState('probe')
+
+      const res = await fetch(`${apiUrl}/probe/arm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challenge_id: challenge.id,
+          site_key: siteKey,
+          session_id: sessionId,
+          probe_id: nextProbe.id,
+          events,
+        }),
+      })
+      const result = await res.json() as { success?: boolean; probe_ticket?: string; error?: string }
+      if (!mountedRef.current) return
+
+      if (!result.success || !result.probe_ticket) {
+        armingProbeIdRef.current = null
+        setState('failed')
+        setErrorMsg(friendlyError('probe_failed', result.error))
+        fetchChallenge()
+        return
+      }
+
+      activeProbeTicketRef.current = result.probe_ticket
+      setActiveProbe(nextProbe)
+    },
+    [apiUrl, challenge, fetchChallenge, sessionId, siteKey, state],
+  )
+
+  const handlePathComplete = useCallback(
+    async (events: RawEvent[]) => {
+      if (!challenge || !maze) return
+      const canonicalEvents = extractLatestPointerAttempt(events)
+      submitValidation(canonicalEvents)
+    },
+    [challenge, maze, submitValidation],
   )
 
   // ── Styles ──
-  const isDark = theme === 'dark'
   const containerStyle: React.CSSProperties = {
     display: 'inline-flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: 8,
     padding: size === 'compact' ? 8 : 12,
-    borderRadius: 8,
-    border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-    background: isDark ? '#0f172a' : '#ffffff',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    color: isDark ? '#e2e8f0' : '#1e293b',
+    borderRadius: 'var(--cerno-radius)',
+    border: '1px solid var(--cerno-border)',
+    background: 'var(--cerno-bg)',
+    fontFamily: 'var(--cerno-font)',
+    color: 'var(--cerno-fg)',
     fontSize: size === 'compact' ? 12 : 14,
     maxWidth: '100%',
+    position: 'relative',
   }
 
   const statusStyle: React.CSSProperties = {
@@ -365,14 +659,14 @@ export function Cerno({
     alignItems: 'center',
     gap: 8,
     fontSize: size === 'compact' ? 11 : 13,
-    color: isDark ? '#94a3b8' : '#64748b',
+    color: 'var(--cerno-muted)',
   }
 
   const retryBtnStyle: React.CSSProperties = {
     padding: '6px 16px',
-    borderRadius: 6,
+    borderRadius: 'var(--cerno-radius)',
     border: 'none',
-    background: isDark ? '#3b82f6' : '#2563eb',
+    background: 'var(--cerno-accent)',
     color: '#ffffff',
     fontSize: size === 'compact' ? 12 : 13,
     cursor: 'pointer',
@@ -383,27 +677,38 @@ export function Cerno({
 
   if (state === 'verified') {
     return (
-      <div style={containerStyle}>
-        <div style={{ ...statusStyle, color: '#22c55e' }}>
+      <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
+        <div style={{ ...statusStyle, color: 'var(--cerno-success)' }}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2" />
             <path d="M6 10l3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Verified
         </div>
+        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+          Verified successfully
+        </div>
       </div>
     )
   }
 
   if (state === 'locked') {
+    const mins = Math.floor(lockoutRemaining / 60)
+    const secs = lockoutRemaining % 60
     return (
-      <div style={containerStyle}>
-        <div style={{ ...statusStyle, color: '#ef4444' }}>
+      <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
+        <div style={{ ...statusStyle, color: 'var(--cerno-muted)' }}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2" />
-            <path d="M7 7l6 6M13 7l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <rect x="4" y="9" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M7 9V6a3 3 0 0 1 6 0v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          {errorMsg}
+          Try again in {mins}:{secs.toString().padStart(2, '0')}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--cerno-muted)', marginTop: 4 }}>
+          This happens sometimes
+        </div>
+        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+          Too many attempts. Please wait.
         </div>
       </div>
     )
@@ -411,10 +716,13 @@ export function Cerno({
 
   if (state === 'loading') {
     return (
-      <div style={containerStyle}>
+      <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
         <div style={statusStyle}>
-          <Spinner isDark={isDark} />
-          Loading challenge...
+          <Spinner />
+          {errorMsg || 'Loading challenge...'}
+        </div>
+        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+          Preparing verification
         </div>
       </div>
     )
@@ -422,11 +730,14 @@ export function Cerno({
 
   if (state === 'submitting') {
     return (
-      <div style={containerStyle}>
-        {maze && <MazeCanvas maze={maze} theme={theme} onPathComplete={() => {}} size={size} />}
+      <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
+        {maze && <MazeCanvas maze={maze} theme={theme} onPathComplete={() => {}} paused size={size} />}
         <div style={statusStyle}>
-          <Spinner isDark={isDark} />
+          <Spinner />
           Verifying...
+        </div>
+        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+          Verifying your response
         </div>
       </div>
     )
@@ -434,8 +745,8 @@ export function Cerno({
 
   if (state === 'failed') {
     return (
-      <div style={containerStyle}>
-        <div style={{ ...statusStyle, color: '#ef4444' }}>{errorMsg}</div>
+      <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
+        <div style={{ ...statusStyle, color: 'var(--cerno-error)' }}>{errorMsg}</div>
         {attempts < MAX_ATTEMPTS && (
           <button
             type="button"
@@ -445,20 +756,59 @@ export function Cerno({
             Try again ({MAX_ATTEMPTS - attempts} left)
           </button>
         )}
+        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+          {`Verification failed. ${MAX_ATTEMPTS - attempts} attempts remaining.`}
+        </div>
+      </div>
+    )
+  }
+
+  // state === 'probe' (showing Stroop overlay)
+  if (state === 'probe' && activeProbe && maze) {
+    const cellSz = size === 'compact' ? 28 : RENDERING.CELL_SIZE
+    return (
+      <div style={{ ...containerStyle, position: 'relative' }} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
+        <MazeCanvas maze={maze} theme={theme} onPathComplete={() => {}} paused size={size} />
+        <StroopOverlay
+          probe={activeProbe}
+          mazeWidth={maze.width}
+          mazeHeight={maze.height}
+          cellSize={cellSz}
+          theme={theme}
+          onComplete={handleProbeComplete}
+        />
+        <div style={statusStyle}>
+          <Spinner />
+          Quick verification...
+        </div>
+        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+          Verifying your response
+        </div>
       </div>
     )
   }
 
   // state === 'ready' | 'solving'
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
       {maze && (
         <MazeCanvas
           maze={maze}
           theme={theme}
           onPathComplete={handlePathComplete}
+          onCellVisit={handleCellVisit}
+          paused={state === 'probe'}
           size={size}
         />
+      )}
+      {expiryWarning && (state === 'ready' || state === 'solving') && (
+        <div style={{
+          fontSize: 11,
+          color: 'var(--cerno-warning)',
+          padding: '4px 0',
+        }}>
+          Time running low
+        </div>
       )}
       <div style={statusStyle}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -467,24 +817,29 @@ export function Cerno({
         </svg>
         Cerno
       </div>
+      <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+        {state === 'ready' && 'Verification ready. Trace the maze path.'}
+      </div>
     </div>
   )
 }
 
-// Hoist keyframes so it's injected once, not per render
+// Hoist keyframes + tokens so they're injected once, not per render
 const SPINNER_KEYFRAMES = `@keyframes cerno-spin { to { transform: rotate(360deg); } }`
-let keyframesInjected = false
-function injectKeyframes() {
-  if (keyframesInjected || typeof document === 'undefined') return
+let stylesInjected = false
+function injectStyles() {
+  if (stylesInjected || typeof document === 'undefined') return
   const style = document.createElement('style')
-  style.textContent = SPINNER_KEYFRAMES
+  style.textContent = [
+    getCernoTokenCSS('light'),
+    SPINNER_KEYFRAMES,
+  ].join('\n')
   document.head.appendChild(style)
-  keyframesInjected = true
+  stylesInjected = true
 }
 
-function Spinner({ isDark }: { isDark: boolean }) {
-  injectKeyframes()
-  const color = isDark ? '#94a3b8' : '#64748b'
+function Spinner() {
+  injectStyles()
   return (
     <svg
       width="16"
@@ -493,7 +848,7 @@ function Spinner({ isDark }: { isDark: boolean }) {
       fill="none"
       style={{ animation: 'cerno-spin 0.8s linear infinite' }}
     >
-      <circle cx="8" cy="8" r="6" stroke={color} strokeWidth="2" strokeDasharray="28 10" strokeLinecap="round" />
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28 10" strokeLinecap="round" />
     </svg>
   )
 }

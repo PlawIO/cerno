@@ -30,6 +30,7 @@
   "files": ["dist"],
   "dependencies": {
     "@cernosh/core": "^0.1.0",
+    "@simplewebauthn/server": "^13.2.2",
     "jose": "^6.0.0"
   }
 }

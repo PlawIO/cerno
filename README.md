@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@cernosh/react?color=0ea5e9&label=%40cernosh%2Freact)](https://www.npmjs.com/package/@cernosh/react)
 [![npm](https://img.shields.io/npm/v/@cernosh/server?color=0ea5e9&label=%40cernosh%2Fserver)](https://www.npmjs.com/package/@cernosh/server)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
-[![Tests](https://img.shields.io/badge/tests-63%20passing-22c55e)](./packages)
+[![Tests](https://img.shields.io/badge/tests-128%20passing-22c55e)](./packages)
 
 AI browser agents can solve reCAPTCHA. They pass hCaptcha. They click checkboxes, recognize traffic lights, and type text. What they cannot do is move a mouse like a human.
 
@@ -78,12 +78,15 @@ import { MemoryStore } from '@cernosh/server'
 
 const config = {
   secret: process.env.CERNO_SECRET!,
-  store: new MemoryStore(), // swap for CloudflareKVStore in production
+  store: new MemoryStore(), // development/test only
 }
 
 // Issue a challenge (called by the widget automatically)
 app.post('/api/captcha/challenge', async (req, res) => {
-  const challenge = await createChallenge(config, req.body.site_key)
+  const challenge = await createChallenge(config, {
+    site_key: req.body.site_key,
+    client_capabilities: req.body.client_capabilities,
+  })
   res.json(challenge)
 })
 
@@ -111,10 +114,12 @@ app.post('/api/sensitive-action', async (req, res) => {
 
 ```bash
 cd apps/worker
-cp wrangler.toml.example wrangler.toml  # add your KV namespace IDs
 wrangler secret put CERNO_SECRET
 wrangler deploy
 ```
+
+The in-repo worker supports a Durable Objects state path for production and a KV fallback for demos.
+`CERNO_MODE=production` requires the Durable Objects binding or another strong-consistency store.
 
 ---
 
@@ -126,14 +131,14 @@ Client                              Server
 │                      │            │                              │
 │  POST /challenge ────┼───────────►│  Generate maze seed          │
 │                      │◄───────────┼─ Maze params + PoW challenge │
-│                      │            │  Store in KV (2min TTL)      │
+│                      │            │  Store in DO/Redis           │
 │  Render maze         │            └──────────────────────────────┘
 │  Start PoW worker    │
 │  Capture raw events  │            ┌──────────────────────────────┐
 │                      │            │  Validation pipeline:        │
 │  POST /verify ───────┼───────────►│  1. Input bounds check       │
-│                      │            │  2. Rate limit (session)     │
-│                      │            │  3. Challenge lookup         │
+│                      │            │  2. Rate limit (server key)  │
+│                      │            │  3. Challenge consume        │
 │                      │            │  4. Site key match           │
 │                      │            │  5. Expiry check             │
 │                      │            │  6. PoW verification         │
@@ -149,6 +154,10 @@ Tokens are:
 - Single-use (replay-proof via consumed-token set)
 - 60-second expiry
 
+### `stable_id` trust boundary
+
+The optional `stableId` prop enables cross-session reputation tracking. **It must be a server-authenticated identity** (e.g., hashed session cookie, database user ID). If you pass a value sourced directly from the browser without server validation, an attacker can generate arbitrary stable IDs to game the reputation system. Set it server-side and inject it into the page, or omit it entirely.
+
 ---
 
 ## Packages
@@ -157,7 +166,8 @@ Tokens are:
 |---------|-------------|------|
 | [`@cernosh/core`](./packages/core) | Seeded PRNG, Growing Tree maze algorithm, BFS solver, maze profiling, 6-feature behavioral extractor with 60Hz resampling | 12.4 KB |
 | [`@cernosh/react`](./packages/react) | Drop-in React component. Canvas renderer, pointer + keyboard collectors, PoW web worker, WebCrypto key binding | 28.6 KB |
-| [`@cernosh/server`](./packages/server) | 8-step validation pipeline, maze-relative behavioral scoring, JWT tokens, CaptchaStore interface | 12.4 KB |
+| [`@cernosh/server`](./packages/server) | Challenge issuance, validation pipeline, probe/WebAuthn flows, JWT tokens, `CaptchaStore` interface | 12.4 KB |
+| [`@cernosh/server-redis`](./packages/server-redis) | Strong-consistency Redis adapter for portable production deployments | 2.1 KB |
 
 ---
 
@@ -210,16 +220,29 @@ The behavioral layer is the real test. The maze is just the delivery mechanism.
 
 ## Cloudflare Worker API
 
-Deploy to the edge in one command. KV-backed storage, no database.
+Deploy to the edge in one command. The checked-in worker uses Durable Objects for authoritative
+state when `CERNO_STATE` is bound, and falls back to KV only for demos or staging.
 
 **Endpoints:**
 
 ```
 POST /challenge   →  { id, maze_seed, maze_width, maze_height, maze_difficulty,
-                       pow_challenge, pow_difficulty, expires_at }
+                       pow_challenge, pow_difficulty, expires_at, requirements,
+                       probes?, webauthn_request_options? }
 
-POST /verify      →  { success: true, token, score }
+POST /probe/arm   →  { success, probe_ticket, armed_at, deadline_at }
+POST /probe/complete
+                  →  { success, completion_token }
+
+POST /verify      →  { success: true, token }
                   →  { success: false, error_code }
+
+POST /webauthn/register/options
+                  →  { session_id, options }
+POST /webauthn/register/verify
+                  →  { success, credential_id? }
+
+POST /siteverify  →  { success, challenge_id?, session_id?, site_key?, error? }
 ```
 
 **Error codes:**
@@ -231,7 +254,7 @@ POST /verify      →  { success: true, token, score }
 | `invalid_pow` | 400 | Proof of work didn't check out |
 | `invalid_path` | 400 | Maze path didn't solve the maze |
 | `behavioral_rejected` | 400 | Behavioral score below threshold |
-| `rate_limited` | 429 | Too many attempts from this session |
+| `rate_limited` | 429 | Too many attempts from this client binding |
 | `invalid_request` | 400 | Malformed or oversized input |
 
 ---
@@ -241,23 +264,33 @@ POST /verify      →  { success: true, token, score }
 ```bash
 bun install
 bun run build   # all packages + landing page
-bun test        # 63 tests across 7 files
+bun test        # 128 tests across 17 files
 ```
 
 ```
-Test Files  7 passed
-     Tests  63 passed
+Test Files  17 passed
+     Tests  128 passed
 
 packages/core:
   seeded-prng.test.ts        4 tests  (determinism, range, distribution)
   maze-generator.test.ts    19 tests  (determinism, solvability, wall integrity, maze profiles)
-  feature-extractor.test.ts  9 tests  (human vs bot, 120Hz resampling, edge cases)
+  feature-extractor.test.ts 11 tests  (human vs bot, 120Hz resampling, edge cases)
+  stroop-probe.test.ts       6 tests  (probe generation, trigger validity, determinism)
 
 packages/server:
+  adaptive-pow.test.ts      10 tests  (difficulty scaling and clamps)
+  adversarial-eval.test.ts   4 tests  (ROC, FPR/TPR, feature-tuned bots)
   behavioral-scoring.test.ts 13 tests  (baselines, maze-relative adaptation, NaN guard, penalties)
+  config.test.ts             6 tests  (production-mode hard failures)
   pow-verify.test.ts          4 tests  (valid/invalid proofs, difficulty)
+  probe-flow.test.ts          1 test   (server-timed arm/complete token flow)
+  probe-validator.test.ts    10 tests  (correctness and timing bounds)
+  reputation.test.ts          7 tests  (stateful trust updates and bonuses)
+  secret-features.test.ts     7 tests  (server-only motion metrics)
+  siteverify.test.ts          5 tests  (server-to-server token verification)
   token.test.ts               5 tests  (JWT round-trip, replay prevention, session binding)
-  validate.test.ts            9 tests  (e2e round-trip, input validation, site_key binding, rate limiting, replay)
+  validate.test.ts           13 tests  (e2e round-trip, binding checks, replay, WebAuthn issuance)
+  webauthn.test.ts            3 tests  (registration fixture, assertion fixture, full validateSubmission path)
 ```
 
 ---

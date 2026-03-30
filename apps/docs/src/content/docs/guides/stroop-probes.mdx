@@ -1,0 +1,145 @@
+---
+title: Stroop Probes
+description: Server-timed cognitive probes that arm mid-solve and complete with signed tokens.
+---
+
+Stroop probes are the second layer of Cerno's verification pipeline. Where the maze tests motor
+control and path planning, Stroop probes test **cognitive presence** with server-authored timing.
+
+## Why Stroop probes
+
+AI agents can solve mazes. They can also replay cursor traces. What they still do badly is handle
+a surprise task under time pressure while staying bound to the actual solve state.
+
+The Stroop effect: naming the ink color of a word is slower when the word names a different color.
+Cerno uses that interference by pausing the solve at a trigger cell and asking the user to tap the
+correct color under a short deadline.
+
+## How it works
+
+1. During challenge generation, `generateStroopProbe()` selects a trigger cell 40-60% through the maze solution path.
+2. It places 3-4 colored cells near that trigger point.
+3. When the user's trace reaches the trigger cell, the client calls `POST /probe/arm` with the trace prefix through that cell.
+4. The server validates the prefix, stores an arm session, and returns a signed `probe_ticket` with `armed_at` and `deadline_at`.
+5. The `StroopOverlay` renders with the server-armed probe. When the user taps a cell, the client calls `POST /probe/complete` with the `probe_ticket`.
+6. The server computes authoritative reaction timing, validates the tap, and returns a signed `completion_token`.
+7. Final `/verify` accepts `probe_completion_tokens`, not raw reaction times.
+
+## Client integration
+
+The `StroopOverlay` component from `@cernosh/react` renders automatically when the user's trace
+hits a trigger cell. You do not need to mount it yourself when using the stock `Cerno` component.
+
+### StroopOverlay props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `probe` | `StroopProbe` | The probe definition (cells, instruction, target color) |
+| `mazeWidth` | `number` | Maze grid width in cells |
+| `mazeHeight` | `number` | Maze grid height in cells |
+| `cellSize` | `number` | Pixel size of each maze cell |
+| `theme` | <code>'light' &#124; 'dark'</code> | Adapts overlay background and text colors |
+| `onComplete` | `(response: ProbeResponse) => void` | Callback with tap result before the client exchanges it for a completion token |
+
+### Client-side callback shape
+
+```typescript
+interface ProbeResponse {
+  probe_id: string
+  tapped_cell: { x: number; y: number }
+  reaction_time_ms: number
+}
+```
+
+That callback is not authoritative. The shipping flow exchanges it for a signed completion token.
+
+## Server validation
+
+Import the probe flow helpers from `@cernosh/server`:
+
+```typescript
+import {
+  armProbe,
+  completeProbe,
+  verifyProbeCompletionTokens,
+} from '@cernosh/server'
+```
+
+### `armProbe(config, request)`
+
+```typescript
+const result = await armProbe(config, {
+  challenge_id,
+  site_key,
+  session_id,
+  probe_id,
+  events: tracePrefix,
+})
+```
+
+This validates that the trace actually reached the trigger cell and returns:
+
+```typescript
+{
+  success: true,
+  probe_ticket: string,
+  armed_at: number,
+  deadline_at: number,
+}
+```
+
+### `completeProbe(config, request)`
+
+```typescript
+const result = await completeProbe(config, {
+  challenge_id,
+  session_id,
+  probe_ticket,
+  tapped_cell,
+})
+```
+
+This returns a signed `completion_token` when the probe response was valid and timely.
+
+### `verifyProbeCompletionTokens(config, challenge, sessionId, tokens)`
+
+```typescript
+const result = await verifyProbeCompletionTokens(
+  config,
+  challenge,
+  sessionId,
+  submission.probe_completion_tokens,
+)
+```
+
+Validation rules:
+
+- token count must match the number of required probes
+- the token must be signed by the server and bound to the challenge and session
+- completion can happen only once
+- server-recorded timing must fall within the allowed bounds
+- all probes must be answered correctly for the probe stage to pass
+
+## Reaction time expectations
+
+| Range | Interpretation |
+|-------|----------------|
+| Below 150ms | Rejected. Superhuman / automated. |
+| 150-300ms | Valid but penalized. Unusually fast for a Stroop task. |
+| 300-2000ms | Ideal range. Full timing score. |
+| 2000-5000ms | Valid but mild penalty. Suggests hesitation or distraction. |
+| Above 5000ms | Rejected. The server deadline elapsed. |
+
+## Configuration
+
+Stroop probes activate when the challenge type is `maze_stroop`. The current implementation injects
+at most one probe and falls back to a plain maze if the maze is too small.
+
+Key parameters in the generation logic:
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Trigger position | 40-60% through solution | Ensures user is engaged before probe fires |
+| Distractor count | 2-3 | Randomly chosen per probe |
+| Auto-timeout | 5000ms | Server rejects completion after deadline |
+| Min solution length | 6 cells | Below this, no probe is generated |

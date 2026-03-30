@@ -1,0 +1,135 @@
+---
+title: siteverify
+description: Server-to-server token verification with the current Cerno response contract.
+---
+
+`siteverify` gives you a server-to-server verification shape similar to reCAPTCHA. It is useful
+when the verifier runs as a separate API service instead of inside the same process as your app.
+The signing secret is server-held only. Clients never send it in the request body.
+
+## When to use siteverify vs verifyToken
+
+| | `siteverify` | `verifyToken` |
+|---|---|---|
+| **Use case** | Server-to-server verification over HTTP | Direct in-process verification |
+| **Secret management** | Server-held secret in verifier options | Single secret in config |
+| **Input validation** | Checks for missing fields before verification | Assumes valid input |
+| **Response format** | Includes decoded claims | Returns `{ valid, score: 0, error? }` |
+
+Use `siteverify` when your backend calls a Cerno API endpoint. Use `verifyToken` when Cerno runs
+in-process.
+
+## Request format
+
+```typescript
+interface SiteverifyRequest {
+  token: string
+  session_id: string
+}
+```
+
+Both required fields must be present or the call returns an error immediately.
+
+## Response format
+
+```typescript
+interface SiteverifyResult {
+  success: boolean
+  score: number
+  challenge_id?: string
+  session_id?: string
+  site_key?: string
+  error?: string
+}
+```
+
+### Success response
+
+```json
+{
+  "success": true,
+  "score": 0,
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "user-session-id",
+  "site_key": "your-site-key"
+}
+```
+
+### Failure response
+
+```json
+{
+  "success": false,
+  "score": 0,
+  "error": "token_expired"
+}
+```
+
+## Usage
+
+### As an HTTP endpoint
+
+Expose `siteverify` as a `POST /siteverify` route:
+
+```typescript
+import { siteverify } from '@cernosh/server'
+
+app.post('/siteverify', async (req, res) => {
+  const result = await siteverify({
+    token: req.body.token,
+    session_id: req.body.session_id,
+  }, {
+    secret: process.env.CERNO_SECRET!,
+    store,
+  })
+
+  res.json(result)
+})
+```
+
+If you expose this route publicly, require an operator auth header. The checked-in worker supports
+`CERNO_SITEVERIFY_AUTH_TOKEN` and expects `Authorization: Bearer <token>`.
+
+### Calling from your backend
+
+```typescript
+const response = await fetch('https://your-cerno-endpoint/siteverify', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${process.env.CERNO_SITEVERIFY_AUTH_TOKEN}`,
+  },
+  body: JSON.stringify({
+    token: clientToken,
+    session_id: userSessionId,
+  }),
+})
+
+const result = await response.json()
+
+if (!result.success) {
+  // reject the request
+}
+```
+
+## Key rotation
+
+Pass an array of versioned signing keys in the verifier options to support key rotation without
+downtime. The function tries each key until one validates:
+
+```typescript
+const result = await siteverify(
+  {
+    token: clientToken,
+    session_id: userSessionId,
+  },
+  {
+    secret: currentSecret,
+    secrets: [
+      { kid: 'v2', value: currentSecret },
+      { kid: 'v1', value: previousSecret },
+    ],
+    store,
+  },
+)
+```

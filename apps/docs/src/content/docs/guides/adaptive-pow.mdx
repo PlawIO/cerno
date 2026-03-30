@@ -1,0 +1,94 @@
+---
+title: Adaptive Proof-of-Work
+description: How PoW difficulty adjusts based on client signals, trust scores, and failed attempts.
+---
+
+Cerno's proof-of-work difficulty is not static. The `computeAdaptiveDifficulty` helper adjusts the
+required SHA-256 leading-zero bits from a base difficulty using request context and prior trust.
+
+## How it works
+
+Each +1 bit of difficulty doubles the expected number of SHA-256 iterations. The default range is **14 to 24 bits**:
+
+| Bits | Iterations | Approximate time |
+|------|-----------|------------------|
+| 14   | ~16K      | ~50ms            |
+| 24   | ~16M      | 30-60s on mobile |
+
+The function starts from a `baseDifficulty` and applies adjustments from `ClientSignals`:
+
+```typescript
+import { computeAdaptiveDifficulty } from '@cernosh/server'
+
+const difficulty = computeAdaptiveDifficulty(baseDifficulty, signals, {
+  minDifficulty: 14, // floor (default)
+  maxDifficulty: 24, // ceiling (default)
+})
+```
+
+## Adjustment rules
+
+### Failed attempts: +1 bit per failure (max +4)
+
+Each failed verification attempt from the same session adds 1 bit of difficulty, capped at +4. This makes brute-force farming progressively more expensive.
+
+```typescript
+// 2 prior failures: difficulty increases by 2 bits
+{ failedAttempts: 2 } // base 16 -> 18
+```
+
+### Trust score: up to -2 bits for trusted clients
+
+Clients with a `trustScore` above 0.7 receive a difficulty discount of up to 2 bits. The discount scales linearly from 0.7 to 1.0.
+
+```typescript
+// Highly trusted client: difficulty decreases by up to 2 bits
+{ trustScore: 0.95 } // base 18 -> 16
+```
+
+A `trustScore` of 0.7 or below provides no discount.
+
+### Missing user agent: +1 bit
+
+Requests without a `User-Agent` header are treated as mildly suspicious. This catches headless clients that do not set standard headers.
+
+```typescript
+// No user agent: +1 bit
+{ userAgent: undefined } // base 16 -> 17
+```
+
+## Client signals interface
+
+The `ClientSignals` type defines all inputs to the adaptive algorithm:
+
+```typescript
+interface ClientSignals {
+  ip?: string
+  userAgent?: string
+  failedAttempts?: number   // recent failures from this session/IP
+  trustScore?: number       // reputation score 0-1 from prior sessions
+}
+```
+
+## Using it in challenge creation
+
+Pass `client_signals` inside the `createChallenge()` request object:
+
+```typescript
+import { createChallenge } from '@cernosh/server'
+
+const challenge = await createChallenge(config, {
+  site_key: siteKey,
+  client_signals: {
+    userAgent: request.headers.get('user-agent') ?? undefined,
+    ip: request.headers.get('cf-connecting-ip') ?? undefined,
+    failedAttempts: await getFailedAttempts(request),
+    trustScore: await lookupReputation(request),
+  },
+})
+```
+
+The worker in this repo already derives basic request signals. Set `CERNO_ADAPTIVE_POW=true` to
+enable adaptive difficulty.
+
+The final difficulty is always clamped to `[minDifficulty, maxDifficulty]`.

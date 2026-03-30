@@ -132,6 +132,25 @@ describe('extractFeatures', () => {
     )
   })
 
+  it('extracts timing_cv for human trace', () => {
+    const events = makeHumanLikeTrace()
+    const features = extractFeatures(events)
+
+    // Human timing has measurable variance (CV > 0)
+    expect(features.timing_cv).toBeGreaterThan(0)
+    // But not wildly unstable
+    expect(features.timing_cv).toBeLessThan(5)
+  })
+
+  it('bot constant-speed has low timing_cv', () => {
+    const bot = extractFeatures(makeBotStraightLine())
+    const human = extractFeatures(makeHumanLikeTrace())
+
+    // Constant-speed bot has very regular timing after resampling
+    // Human has more timing variation
+    expect(bot.timing_cv).toBeLessThan(human.timing_cv)
+  })
+
   it('handles high-frequency events (120Hz → resampled to 60Hz)', () => {
     // 120Hz input: events every ~8.3ms
     const events: RawEvent[] = []

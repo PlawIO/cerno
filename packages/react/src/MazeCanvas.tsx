@@ -8,6 +8,8 @@ export interface MazeCanvasProps {
   maze: Maze
   theme: 'light' | 'dark'
   onPathComplete: (events: RawEvent[]) => void
+  onCellVisit?: (cell: { x: number; y: number }, events: RawEvent[], inputMode: 'pointer' | 'keyboard') => void
+  paused?: boolean
   size?: 'normal' | 'compact'
 }
 
@@ -20,7 +22,14 @@ interface DragState {
 
 const cellKey = (x: number, y: number) => `${x},${y}`
 
-export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: MazeCanvasProps) {
+export function MazeCanvas({
+  maze,
+  theme,
+  onPathComplete,
+  onCellVisit,
+  paused = false,
+  size = 'normal',
+}: MazeCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const mouseCollectorRef = useRef<MouseCollector | null>(null)
@@ -284,7 +293,7 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
   // Pointer event handlers for drag path tracking
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (completedRef.current) return
+      if (completedRef.current || paused) return
       setInputMode('pointer')
 
       const canvas = canvasRef.current
@@ -300,21 +309,26 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
       // Must start on the start cell
       if (cell.x !== maze.start.x || cell.y !== maze.start.y) return
 
-      canvas.setPointerCapture(e.pointerId)
+      // Reset mouse collector on first drag start to discard pre-interaction hover events
       const drag = dragRef.current
+      if (!drag.dragging) {
+        mouseCollectorRef.current?.reset()
+      }
+
+      canvas.setPointerCapture(e.pointerId)
       drag.dragging = true
       drag.path = [{ x: cell.x, y: cell.y }]
       drag.visitedCells = new Set([cellKey(cell.x, cell.y)])
       drag.currentCell = cell
       draw()
     },
-    [maze, pxToCell, logicalW, draw],
+    [maze, pxToCell, logicalW, draw, paused],
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       const drag = dragRef.current
-      if (!drag.dragging || completedRef.current) return
+      if (!drag.dragging || completedRef.current || paused) return
 
       const canvas = canvasRef.current
       if (!canvas) return
@@ -352,6 +366,10 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
       drag.path.push({ x: cell.x, y: cell.y })
       drag.visitedCells.add(key)
       drag.currentCell = cell
+      const mc = mouseCollectorRef.current
+      if (mc) {
+        onCellVisit?.(cell, mc.getEvents(), 'pointer')
+      }
       draw()
 
       // Check if reached exit
@@ -365,10 +383,11 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
         }
       }
     },
-    [maze, pxToCell, canPass, logicalW, draw, onPathComplete],
+    [maze, pxToCell, canPass, logicalW, draw, onCellVisit, onPathComplete, paused],
   )
 
   const handlePointerUp = useCallback(() => {
+    if (paused) return
     const drag = dragRef.current
     if (!drag.dragging) return
     // If they released without reaching exit, reset the path
@@ -377,12 +396,12 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
     drag.visitedCells.clear()
     drag.currentCell = null
     draw()
-  }, [draw])
+  }, [draw, paused])
 
   // Keyboard mode: watch for arrow key presses and check exit
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (completedRef.current) return
+      if (completedRef.current || paused) return
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       setInputMode('keyboard')
 
@@ -393,6 +412,7 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
         const kb = kbCollectorRef.current
         if (kb) {
           const cursor = kb.getCursorCell()
+          onCellVisit?.(cursor, kb.getEvents(), 'keyboard')
           if (cursor.x === maze.exit.x && cursor.y === maze.exit.y) {
             completedRef.current = true
             kb.stop()
@@ -407,7 +427,7 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
       document.removeEventListener('keydown', onKeyDown)
       cancelAnimationFrame(animFrameRef.current)
     }
-  }, [maze, draw, onPathComplete])
+  }, [maze, draw, onCellVisit, onPathComplete, paused])
 
   // Reset completed flag when maze changes
   useEffect(() => {
@@ -429,6 +449,8 @@ export function MazeCanvas({ maze, theme, onPathComplete, size = 'normal' }: Maz
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        role="img"
+        aria-label="Maze puzzle. Trace path from start to exit."
         style={{
           display: 'block',
           cursor: 'crosshair',

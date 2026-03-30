@@ -1,0 +1,185 @@
+---
+import Search from 'virtual:starlight/components/Search';
+---
+
+<div class="header-inner">
+  <div class="header-left">
+    <a href="/" class="logo">
+      <svg class="logo-mark" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="13" y1="3" x2="33" y2="3"/>
+          <line x1="33" y1="3" x2="33" y2="33"/>
+          <line x1="3" y1="33" x2="23" y2="33"/>
+          <line x1="3" y1="3" x2="3" y2="33"/>
+          <line x1="13" y1="13" x2="13" y2="23"/>
+          <line x1="23" y1="3" x2="23" y2="13"/>
+          <line x1="23" y1="23" x2="23" y2="33"/>
+          <line x1="13" y1="23" x2="23" y2="23"/>
+        </g>
+        <path d="M8 3 L8 8 L18 8 L18 18 L28 18 L28 28 L28 33" stroke="#2596be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Cerno SDK
+    </a>
+  </div>
+  <div class="header-center">
+    <Search />
+  </div>
+  <div class="header-right">
+    <a href="/docs/getting-started/">Docs</a>
+    <a href="https://github.com/PlawIO/cerno" target="_blank" rel="noopener">GitHub</a>
+    <button class="theme-toggle" id="docs-theme-toggle" aria-label="Toggle theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const modes = ['auto', 'light', 'dark'] as const;
+    const btn = document.getElementById('docs-theme-toggle');
+    if (!btn) return;
+
+    const stored = localStorage.getItem('starlight-theme');
+    let currentMode: string = (stored === 'light' || stored === 'dark') ? stored : 'auto';
+
+    function applyTheme(mode: string) {
+      currentMode = mode;
+      btn!.setAttribute('data-mode', mode);
+      let dark: boolean;
+      if (mode === 'auto') {
+        dark = matchMedia('(prefers-color-scheme:dark)').matches;
+        localStorage.removeItem('starlight-theme');
+      } else {
+        dark = mode === 'dark';
+        localStorage.setItem('starlight-theme', mode);
+      }
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    }
+
+    btn.setAttribute('data-mode', currentMode);
+    btn.addEventListener('click', () => {
+      const next = modes[(modes.indexOf(currentMode as any) + 1) % modes.length];
+      applyTheme(next);
+    });
+
+    matchMedia('(prefers-color-scheme:dark)').addEventListener('change', () => {
+      if (currentMode === 'auto') applyTheme('auto');
+    });
+  });
+</script>
+
+<style>
+  /* Style Starlight's outer <header> wrapper via :global */
+  :global(header.header) {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: color-mix(in srgb, var(--sl-color-black) 90%, transparent) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--cerno-border) !important;
+    height: var(--sl-nav-height);
+    display: flex;
+    align-items: center;
+  }
+
+  .header-inner {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.25rem;
+    height: 100%;
+    gap: 1rem;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--sl-font-mono);
+    font-weight: 500;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--cerno-ink);
+    text-decoration: none;
+  }
+
+  .logo-mark { width: 20px; height: 20px; flex-shrink: 0; }
+
+  .header-center {
+    flex: 1;
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  /* Restyle Starlight's search to blend */
+  .header-center :global(site-search button) {
+    border-radius: 8px !important;
+    border: 1px solid var(--cerno-border) !important;
+    background: color-mix(in srgb, var(--sl-color-black) 60%, transparent) !important;
+    font-size: 13px !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+  }
+
+  .header-right {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+    color: var(--sl-color-gray-2);
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .header-right a {
+    transition: color 0.15s;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .header-right a:hover { color: var(--cerno-ink); }
+
+  /* Theme toggle */
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--sl-color-gray-2);
+    padding: 4px;
+    min-height: 44px;
+    min-width: 44px;
+    transition: color 0.15s;
+  }
+  .theme-toggle:hover { color: var(--cerno-ink); }
+  .theme-toggle svg { width: 16px; height: 16px; }
+  .theme-toggle .icon-sun,
+  .theme-toggle .icon-moon,
+  .theme-toggle .icon-auto { display: none; }
+  :global([data-theme='light']) .theme-toggle[data-mode='light'] .icon-sun,
+  :global([data-theme='dark']) .theme-toggle[data-mode='dark'] .icon-moon,
+  .theme-toggle[data-mode='auto'] .icon-auto { display: block; }
+  .theme-toggle:not([data-mode]) .icon-auto { display: block; }
+
+  @media (max-width: 50rem) {
+    .header-right a { display: none; }
+    .header-center { max-width: none; }
+    /* Make room for Starlight's fixed-position hamburger button */
+    .header-inner { padding-inline-end: calc(var(--sl-menu-button-size, 2rem) + 1.25rem + 0.5rem); }
+  }
+</style>
