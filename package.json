@@ -6,7 +6,7 @@
     "build": "bun run --filter @cernosh/core build && bun run --filter @cernosh/server build && bun run --filter @cernosh/server-redis build && bun run --filter @cernosh/react build && bun run --filter @cerno/docs build && bun run --filter @cernosh/web build",
     "test": "vitest run",
     "dev": "bun run --filter '*' dev",
-    "typecheck": "bun run --filter @cernosh/core typecheck && bun run --filter @cernosh/server typecheck && bun run --filter @cernosh/server-redis typecheck && bun run --filter @cernosh/react typecheck && bun run --filter @cernosh/worker typecheck"
+    "typecheck": "bun run --filter @cernosh/core typecheck && bun run --filter @cernosh/server typecheck && bun run --filter @cernosh/server-redis typecheck && bun run --filter @cernosh/react typecheck"
   },
   "devDependencies": {
     "@react-grab/claude-code": "^0.1.29",

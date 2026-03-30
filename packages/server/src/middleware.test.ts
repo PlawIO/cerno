@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { type RawEvent, generateMaze, RENDERING } from '@cernosh/core'
 import { MemoryStore } from './store.js'
-import { generateSyntheticHumanTrace } from './calibration.js'
+import { generateSyntheticHumanTrace } from './test-utils.js'
 import { cernoMiddleware, toExpressHandler } from './middleware.js'
 import type { ServerConfig } from './types.js'
 

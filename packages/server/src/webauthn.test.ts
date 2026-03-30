@@ -9,7 +9,7 @@ import { generateMaze, RENDERING } from '@cernosh/core'
 import { createChallenge, validateSubmission } from './validate.js'
 import { completeWebAuthnRegistration, verifyWebAuthnAuthentication } from './webauthn.js'
 import { MemoryStore } from './store.js'
-import { generateSyntheticHumanTrace } from './calibration.js'
+import { generateSyntheticHumanTrace } from './test-utils.js'
 import type { ServerConfig } from './types.js'
 
 const INSTRUCTION_TEXT_HEIGHT = 24

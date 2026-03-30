@@ -9,6 +9,10 @@ export { computeAdaptiveDifficulty } from './adaptive-pow.js'
 export { validateProbeResponses, scoreProbePerformance } from './probe-validator.js'
 export { armProbe, completeProbe, verifyProbeCompletionTokens } from './probe-flow.js'
 export { queryReputation, updateReputation, reputationKey, computeConsistencyBonus } from './reputation.js'
+
+// Scoring internals (public algorithm — the moat is calibration data, not the code)
+export { scoreBehavior } from './behavioral-scoring.js'
+export { extractSecretFeatures, scoreSecretFeatures } from './secret-features.js'
 export {
   beginWebAuthnRegistration,
   completeWebAuthnRegistration,

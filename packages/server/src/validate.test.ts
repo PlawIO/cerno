@@ -3,7 +3,7 @@ import { type RawEvent, generateMaze, RENDERING } from '@cernosh/core'
 import { createChallenge, validateSubmission } from './validate.js'
 import { verifyToken } from './token.js'
 import { MemoryStore } from './store.js'
-import { generateSyntheticHumanTrace } from './calibration.js'
+import { generateSyntheticHumanTrace } from './test-utils.js'
 import type { ServerConfig, SecretFeaturesProvider, ScoringContext, ValidationEvent } from './types.js'
 
 const INSTRUCTION_TEXT_HEIGHT = 24
