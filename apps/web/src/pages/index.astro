@@ -1553,7 +1553,8 @@ const enableReactGrab = import.meta.env.DEV
           if (result.success) {
             setHint('Proof of human', '#16a34a');
           } else {
-            setHint('Non-human pattern', '#dc2626');
+            var reason = result.error_code || 'rejected';
+            setHint(reason === 'behavioral_rejected' ? 'Non-human pattern' : reason.replace(/_/g, ' '), '#dc2626');
           }
         } catch (err) {
           setHint('Connection error', '#dc2626');
