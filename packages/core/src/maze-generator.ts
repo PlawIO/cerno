@@ -210,8 +210,28 @@ export function computeMazeProfile(maze: Maze): MazeProfile {
 }
 
 /**
+ * Determine the wall direction between two adjacent cells.
+ * Returns 0 if cells are not orthogonally adjacent.
+ */
+function adjacentDir(fx: number, fy: number, tx: number, ty: number): number {
+  const dx = tx - fx
+  const dy = ty - fy
+  if (Math.abs(dx) + Math.abs(dy) !== 1) return 0
+  if (dx === 1) return Wall.E
+  if (dx === -1) return Wall.W
+  if (dy === 1) return Wall.S
+  return Wall.N
+}
+
+/**
  * Validate that a path of normalized (0-1) coordinates
  * traces a valid route through the maze from start to exit.
+ *
+ * Raw pointer events may contain coordinates in non-adjacent cells
+ * when the user moves the pointer quickly across cell boundaries.
+ * These "skipped" events are filtered out as pointer noise — only
+ * events that are adjacent to the last accepted cell and connected
+ * through a valid passage are kept.
  */
 export function validatePath(
   maze: Maze,
@@ -225,41 +245,28 @@ export function validatePath(
     y: Math.min(Math.floor(p.y * maze.height), maze.height - 1),
   }))
 
-  // Deduplicate consecutive same-cell entries
-  const uniqueCells: Point[] = [cells[0]]
+  // Build a connected path, skipping non-adjacent pointer noise.
+  // Each accepted cell must be orthogonally adjacent to the previous
+  // accepted cell with no wall between them.
+  const connected: Point[] = [cells[0]]
   for (let i = 1; i < cells.length; i++) {
-    const prev = uniqueCells[uniqueCells.length - 1]
-    if (cells[i].x !== prev.x || cells[i].y !== prev.y) {
-      uniqueCells.push(cells[i])
-    }
+    const prev = connected[connected.length - 1]
+    // Same cell — skip
+    if (cells[i].x === prev.x && cells[i].y === prev.y) continue
+    // Check adjacency
+    const dir = adjacentDir(prev.x, prev.y, cells[i].x, cells[i].y)
+    if (!dir) continue // non-adjacent: pointer noise, skip
+    // Check wall
+    if (maze.grid[prev.y][prev.x].walls & dir) continue // wall-blocked, skip
+    connected.push(cells[i])
   }
 
   // Must start at maze start and end at maze exit
-  const first = uniqueCells[0]
-  const last = uniqueCells[uniqueCells.length - 1]
+  if (connected.length < 2) return false
+  const first = connected[0]
+  const last = connected[connected.length - 1]
   if (first.x !== maze.start.x || first.y !== maze.start.y) return false
   if (last.x !== maze.exit.x || last.y !== maze.exit.y) return false
-
-  // Each consecutive pair must be adjacent (no wall between them)
-  for (let i = 0; i < uniqueCells.length - 1; i++) {
-    const curr = uniqueCells[i]
-    const next = uniqueCells[i + 1]
-    const dx = next.x - curr.x
-    const dy = next.y - curr.y
-
-    // Must be adjacent (no diagonal)
-    if (Math.abs(dx) + Math.abs(dy) !== 1) return false
-
-    // Determine direction
-    let dir: number
-    if (dx === 1) dir = Wall.E
-    else if (dx === -1) dir = Wall.W
-    else if (dy === 1) dir = Wall.S
-    else dir = Wall.N
-
-    // Check no wall blocks this move
-    if (maze.grid[curr.y][curr.x].walls & dir) return false
-  }
 
   return true
 }

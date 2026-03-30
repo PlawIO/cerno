@@ -203,6 +203,30 @@ describe('validatePath', () => {
     expect(validatePath(maze, partialPath)).toBe(false)
   })
 
+  it('accepts a valid path with non-adjacent pointer noise (fast mouse movement)', () => {
+    const maze = generateMaze({ width: 8, height: 8, difficulty: 0.3, seed: 42 })
+    const solution = maze.solution
+    // Insert non-adjacent noise events between valid path points
+    // (simulates fast mouse movement skipping cells)
+    const noisyPath: Point[] = []
+    for (let i = 0; i < solution.length; i++) {
+      noisyPath.push({
+        x: (solution[i].x + 0.5) / maze.width,
+        y: (solution[i].y + 0.5) / maze.height,
+      })
+      // After some cells, inject a coordinate that's 2+ cells away (pointer noise)
+      if (i < solution.length - 1 && i % 3 === 0) {
+        const noiseX = Math.min(maze.width - 1, solution[i].x + 2)
+        const noiseY = Math.min(maze.height - 1, solution[i].y + 2)
+        noisyPath.push({
+          x: (noiseX + 0.5) / maze.width,
+          y: (noiseY + 0.5) / maze.height,
+        })
+      }
+    }
+    expect(validatePath(maze, noisyPath)).toBe(true)
+  })
+
   it('rejects a path that crosses walls', () => {
     const maze = generateMaze({ width: 10, height: 10, difficulty: 0.3, seed: 42 })
     // Straight line from (0,0) to (9,9) will almost certainly cross walls
