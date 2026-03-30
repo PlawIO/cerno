@@ -7,15 +7,16 @@
  */
 
 /** Gaussian dampening factor. Controls how quickly scores degrade with z-score distance.
- *  k=2 means z=2 scores ~0.61, z=3 scores ~0.32. Tighter than k=3 (default normal)
- *  to penalize moderate deviations harder. Calibrated to achieve >90% TPR, <5% FPR. */
-export const GAUSSIAN_K = 2
+ *  k=3: z=2 scores ~0.80, z=3 scores ~0.61. Standard 3-sigma tolerance for natural
+ *  human variation. k=2 was too aggressive — calibrated against synthetic traces,
+ *  caused false rejections on real users (especially mobile). */
+export const GAUSSIAN_K = 3
 
-/** Weight of public behavioral features in the blended score (0-1). */
-export const PUBLIC_SCORE_WEIGHT = 0.7
+/** Weight of public behavioral features in the blended score (0-1). K-H4: rebalanced from 0.7 */
+export const PUBLIC_SCORE_WEIGHT = 0.6
 
-/** Weight of secret server-only features in the blended score (0-1). */
-export const SECRET_SCORE_WEIGHT = 0.3
+/** Weight of secret server-only features in the blended score (0-1). K-H4: rebalanced from 0.3 */
+export const SECRET_SCORE_WEIGHT = 0.4
 
 /** Maximum score bonus from Stroop probe performance. */
 export const PROBE_BONUS_MAX = 0.05

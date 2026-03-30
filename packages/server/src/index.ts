@@ -12,7 +12,7 @@ export { queryReputation, updateReputation, reputationKey, computeConsistencyBon
 
 // Scoring internals (public algorithm — the moat is calibration data, not the code)
 export { scoreBehavior } from './behavioral-scoring.js'
-export { extractSecretFeatures, scoreSecretFeatures } from './secret-features.js'
+export { extractSecretFeatures, scoreSecretFeatures, type ProbeTimingData } from './secret-features.js'
 export {
   beginWebAuthnRegistration,
   completeWebAuthnRegistration,

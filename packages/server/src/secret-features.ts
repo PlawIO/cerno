@@ -29,6 +29,12 @@ export interface SecretFeatures {
   curvature_mean: number
   /** Shannon entropy of raw inter-event interval histogram (before 60Hz resampling) */
   raw_timing_entropy: number
+  /** K-H1: Motor event density during probe window vs baseline. Humans ~0.5, agents ~0 */
+  probe_motor_continuity: number
+  /** K-H2: Mean coalesced events per pointer frame. Real hardware ~3, synthetic/CDP ~1 */
+  coalesced_event_ratio: number
+  /** Excess kurtosis of inter-event intervals. Human log-normal ~3-15, uniform jitter ~-1.2 */
+  timing_kurtosis: number
 }
 
 interface SecretBaseline {
@@ -41,31 +47,53 @@ interface SecretBaseline {
  * Baselines for secret features. These are the scoring targets.
  * Rotate these periodically based on production data.
  */
+/**
+ * Calibrated from 200 synthetic human traces across 6x6/8x8/10x10 mazes.
+ * Std widened 1.5x beyond observed synthetic variance to accommodate
+ * real hardware variation. Last calibrated: 2026-03-30.
+ */
 const SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
-  velocity_autocorrelation: { mean: 0.45, std: 0.15, weight: 1.2 },
-  micro_correction_rate:    { mean: 0.15, std: 0.08, weight: 1.0 },
-  sub_movement_count:       { mean: 8,    std: 4,    weight: 0.8 },
-  acceleration_asymmetry:   { mean: 1.5,  std: 0.3,  weight: 1.0 },
-  curvature_mean:           { mean: 0.24, std: 0.12, weight: 0.8 },
-  raw_timing_entropy:       { mean: 2.5,  std: 0.8,  weight: 0.5 },
+  velocity_autocorrelation:  { mean: 0.83,  std: 0.08,   weight: 1.2 },
+  micro_correction_rate:     { mean: 0.70,  std: 0.08,   weight: 1.5 },
+  sub_movement_count:        { mean: 65,    std: 28,     weight: 0.8 },
+  acceleration_asymmetry:    { mean: 1.01,  std: 0.13,   weight: 1.0 },
+  curvature_mean:            { mean: 620,   std: 550,    weight: 0.8 },
+  raw_timing_entropy:        { mean: 5.17,  std: 0.52,   weight: 0.5 },
+  probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 1.0 },
+  coalesced_event_ratio:     { mean: 3.0,   std: 1.5,    weight: 1.0 },
+  timing_kurtosis:           { mean: 12.0,  std: 8.5,    weight: 1.0 },
 }
 
+/**
+ * Touch-specific baselines. Touch has more spatial noise (finger vs cursor),
+ * so wider std and shifted means. Based on mouse calibration + touch offsets.
+ */
 const TOUCH_SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
-  velocity_autocorrelation: { mean: 0.35, std: 0.20, weight: 1.2 },
-  micro_correction_rate:    { mean: 0.10, std: 0.06, weight: 1.0 },
-  sub_movement_count:       { mean: 12,   std: 6,    weight: 0.8 },
-  acceleration_asymmetry:   { mean: 1.3,  std: 0.4,  weight: 1.0 },
-  curvature_mean:           { mean: 0.30, std: 0.15, weight: 0.8 },
-  raw_timing_entropy:       { mean: 2.8,  std: 1.0,  weight: 0.5 },
+  velocity_autocorrelation:  { mean: 0.75,  std: 0.12,   weight: 1.2 },
+  micro_correction_rate:     { mean: 0.65,  std: 0.12,   weight: 1.0 },
+  sub_movement_count:        { mean: 55,    std: 30,     weight: 0.8 },
+  acceleration_asymmetry:    { mean: 1.05,  std: 0.20,   weight: 1.0 },
+  curvature_mean:            { mean: 700,   std: 600,    weight: 0.8 },
+  raw_timing_entropy:        { mean: 5.0,   std: 0.8,    weight: 0.5 },
+  probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 1.0 },
+  coalesced_event_ratio:     { mean: 1.5,   std: 1.0,    weight: 0.6 },
+  timing_kurtosis:           { mean: 10.0,  std: 10.0,   weight: 0.8 },
 }
 
+/**
+ * Keyboard baselines. Arrow-key navigation produces discrete jumps,
+ * very different kinematics from pointer input. Lower weights on most features.
+ */
 const KEYBOARD_SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
-  velocity_autocorrelation: { mean: 0.20, std: 0.15, weight: 0.6 },
-  micro_correction_rate:    { mean: 0.05, std: 0.04, weight: 0.6 },
-  sub_movement_count:       { mean: 5,    std: 3,    weight: 0.6 },
-  acceleration_asymmetry:   { mean: 1.0,  std: 0.3,  weight: 0.6 },
-  curvature_mean:           { mean: 0.08, std: 0.05, weight: 0.6 },
-  raw_timing_entropy:       { mean: 2.0,  std: 0.7,  weight: 0.5 },
+  velocity_autocorrelation:  { mean: 0.20,  std: 0.15,   weight: 0.6 },
+  micro_correction_rate:     { mean: 0.05,  std: 0.04,   weight: 0.6 },
+  sub_movement_count:        { mean: 15,    std: 10,     weight: 0.6 },
+  acceleration_asymmetry:    { mean: 1.0,   std: 0.3,    weight: 0.6 },
+  curvature_mean:            { mean: 200,   std: 200,    weight: 0.6 },
+  raw_timing_entropy:        { mean: 4.0,   std: 1.0,    weight: 0.5 },
+  probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 0.0 },
+  coalesced_event_ratio:     { mean: 1.0,   std: 0.5,    weight: 0.0 },
+  timing_kurtosis:           { mean: 8.0,   std: 8.0,    weight: 0.5 },
 }
 
 function getSecretBaselines(inputType?: import('@cernosh/core').InputMode, scoringConfig?: ScoringConfig): Record<keyof SecretFeatures, SecretBaseline> {
@@ -123,7 +151,15 @@ function resampleTo60Hz(events: RawEvent[]): RawEvent[] {
   return resampled
 }
 
-export function extractSecretFeatures(events: RawEvent[]): SecretFeatures {
+/** K-H1: Probe timing data for motor-stream correlation analysis */
+export interface ProbeTimingData {
+  /** When probe was shown, relative to collector start time (ms) */
+  probe_shown_at: number
+  /** Reaction time to respond to probe (ms) */
+  reaction_time_ms: number
+}
+
+export function extractSecretFeatures(events: RawEvent[], probeTimings?: ProbeTimingData[]): SecretFeatures {
   const moveEvents = events.filter(
     (e) => e.type === 'move' || e.type === 'down' || e.type === 'up',
   )
@@ -136,6 +172,9 @@ export function extractSecretFeatures(events: RawEvent[]): SecretFeatures {
       acceleration_asymmetry: 1,
       curvature_mean: 0,
       raw_timing_entropy: 0,
+      probe_motor_continuity: NaN,
+      coalesced_event_ratio: NaN,
+      timing_kurtosis: NaN,
     }
   }
 
@@ -144,24 +183,37 @@ export function extractSecretFeatures(events: RawEvent[]): SecretFeatures {
   // Real hardware: clustered intervals (OS scheduler jitter, USB poll rate).
   // Synthetic: smoother/uniform distribution even with jitter.
   let raw_timing_entropy = 0
+  let timing_kurtosis = NaN
+  const rawIntervals: number[] = []
   if (moveEvents.length >= 3) {
-    const intervals: number[] = []
     for (let i = 1; i < moveEvents.length; i++) {
       const dt = moveEvents[i].t - moveEvents[i - 1].t
-      if (dt > 0) intervals.push(dt)
+      if (dt > 0) rawIntervals.push(dt)
     }
-    if (intervals.length >= 2) {
+    if (rawIntervals.length >= 2) {
       // Bin intervals into 1ms buckets, compute Shannon entropy
       const bins = new Map<number, number>()
-      for (const dt of intervals) {
+      for (const dt of rawIntervals) {
         const bin = Math.round(dt) // 1ms resolution
         bins.set(bin, (bins.get(bin) ?? 0) + 1)
       }
-      const n = intervals.length
+      const n = rawIntervals.length
       for (const count of bins.values()) {
         const p = count / n
         if (p > 0) raw_timing_entropy -= p * Math.log2(p)
       }
+    }
+    // ── Timing kurtosis (excess kurtosis of inter-event intervals) ──
+    // Human hardware produces log-normal intervals with heavy tails (kurtosis > 1).
+    // Uniform jitter produces platykurtic distribution (kurtosis ≈ -1.2).
+    // CDP / constant timing produces near-zero variance (kurtosis ≈ 0).
+    // This discriminates timing distribution SHAPE, not just spread (entropy) or regularity (CV).
+    if (rawIntervals.length >= 10) {
+      const n = rawIntervals.length
+      const mean = rawIntervals.reduce((a, b) => a + b, 0) / n
+      const m2 = rawIntervals.reduce((s, v) => s + (v - mean) ** 2, 0) / n
+      const m4 = rawIntervals.reduce((s, v) => s + (v - mean) ** 4, 0) / n
+      timing_kurtosis = m2 > 1e-10 ? m4 / (m2 * m2) - 3 : 0
     }
   }
 
@@ -174,6 +226,9 @@ export function extractSecretFeatures(events: RawEvent[]): SecretFeatures {
       acceleration_asymmetry: 1,
       curvature_mean: 0,
       raw_timing_entropy,
+      probe_motor_continuity: NaN,
+      coalesced_event_ratio: NaN,
+      timing_kurtosis,
     }
   }
 
@@ -274,6 +329,48 @@ export function extractSecretFeatures(events: RawEvent[]): SecretFeatures {
     ? curvatures.reduce((a, b) => a + b, 0) / curvatures.length
     : 0
 
+  // ── K-H1: Probe-motor continuity ──
+  // Measure motor event density in ±500ms window around each probe display.
+  // Humans maintain ~50% of baseline event rate during cognitive interrupts.
+  // Agents halt entirely (observe-reason-act serialization).
+  const PROBE_WINDOW_MS = 500
+  let probe_motor_continuity = NaN // NaN = no probe data, excluded from scoring
+  // Empty array (not undefined) means probes were issued but client omitted timing
+  // data — treat as zero continuity (agent-like evasion).
+  if (probeTimings && probeTimings.length === 0) {
+    probe_motor_continuity = 0
+  } else if (probeTimings && probeTimings.length > 0 && moveEvents.length > 10) {
+    const totalDuration = moveEvents[moveEvents.length - 1].t - moveEvents[0].t
+    const baselineRate = totalDuration > 0 ? moveEvents.length / totalDuration : 0
+
+    let totalProbeRate = 0
+    let probeCount = 0
+    for (const probe of probeTimings) {
+      const windowStart = probe.probe_shown_at - PROBE_WINDOW_MS
+      const windowEnd = probe.probe_shown_at + PROBE_WINDOW_MS
+      const windowEvents = moveEvents.filter(e => e.t >= windowStart && e.t <= windowEnd)
+      const windowDuration = PROBE_WINDOW_MS * 2
+      const windowRate = windowDuration > 0 ? windowEvents.length / windowDuration : 0
+      totalProbeRate += baselineRate > 0 ? windowRate / baselineRate : 0
+      probeCount++
+    }
+    probe_motor_continuity = probeCount > 0 ? totalProbeRate / probeCount : 0.5
+  }
+
+  // ── K-H2: Coalesced event ratio ──
+  // Real hardware at 120Hz+ coalesces 2-8 events per pointer frame.
+  // CDP/synthetic dispatches exactly 1 event per call.
+  const coalescedEvents = moveEvents.filter(e => e.coalesced_count != null)
+  let coalesced_event_ratio: number
+  if (coalescedEvents.length >= 5) {
+    const totalCoalesced = coalescedEvents.reduce((sum, e) => sum + (e.coalesced_count ?? 1), 0)
+    coalesced_event_ratio = totalCoalesced / coalescedEvents.length
+  } else {
+    // No coalesced data (browser doesn't support getCoalescedEvents).
+    // Use NaN sentinel — scoreSecretFeatures will exclude from scoring.
+    coalesced_event_ratio = NaN
+  }
+
   return {
     velocity_autocorrelation,
     micro_correction_rate,
@@ -281,6 +378,9 @@ export function extractSecretFeatures(events: RawEvent[]): SecretFeatures {
     acceleration_asymmetry,
     curvature_mean,
     raw_timing_entropy,
+    probe_motor_continuity,
+    coalesced_event_ratio,
+    timing_kurtosis,
   }
 }
 
@@ -299,11 +399,22 @@ export function scoreSecretFeatures(
   let weightedSum = 0
   let totalWeight = 0
   const zScores: Record<string, number> = {}
-  const k = scoringConfig?.gaussianK ?? GAUSSIAN_K
+  const baseK = scoringConfig?.gaussianK ?? GAUSSIAN_K
+
+  // Secret features use tighter Gaussian (k * 0.75) than public features.
+  // This makes the scorer more sensitive in the z=1-2 range where bots live.
+  // Humans cluster at z < 0.5 and are barely affected. Bots at z=1-2 get
+  // significantly lower per-feature scores (e.g. z=1.5: 0.607 vs 0.754).
+  const k = baseK * 0.75
 
   for (const key of keys) {
     const baseline = baselines[key]
     const value = features[key]
+    // Skip features with no data (NaN sentinel from unsupported APIs)
+    if (Number.isNaN(value) || baseline.weight === 0) {
+      zScores[key] = 0
+      continue
+    }
     const zScore = baseline.std > 0
       ? Math.abs(value - baseline.mean) / baseline.std
       : 0
@@ -313,7 +424,52 @@ export function scoreSecretFeatures(
     totalWeight += baseline.weight
   }
 
-  const score = totalWeight > 0 ? weightedSum / totalWeight : 0
+  let score = totalWeight > 0 ? weightedSum / totalWeight : 0
+
+  // ── Hard anomaly gates ──
+  // These catch bot signals that Gaussian scoring is too forgiving on.
+  // Gates compound multiplicatively.
+
+  // Gate 1: Timing kurtosis gradient penalty.
+  // Human inter-event intervals are log-normal (hardware poll + OS scheduling),
+  // producing excess kurtosis >> 0 (calibration: min=0.86, median=10.1).
+  // Synthetic timing (uniform jitter, constant intervals) produces kurtosis ≤ -1.
+  // Gradient: full penalty below 0, linear ramp 0→3, no penalty above 3.
+  if (!Number.isNaN(features.timing_kurtosis) && features.timing_kurtosis < 3.0) {
+    const multiplier = Math.max(0.25, (features.timing_kurtosis + 1) / 4)
+    score *= multiplier
+  }
+
+  // Gate 2: Directional bias detection.
+  // Bots are systematically BELOW human means on kinematic features
+  // (vel_ac, micro-corrections, curvature, entropy, kurtosis). Humans
+  // scatter randomly above and below. Signed z-score mean:
+  //   Human: mean=0.004, range [-0.40, +0.74]
+  //   Bot:   mean=-1.19,  range [-1.74, -0.72]
+  // Zero overlap at -0.5. This is the strongest behavioral discriminator.
+  const DIRECTIONAL_KEYS: Array<keyof SecretFeatures> = [
+    'velocity_autocorrelation', 'micro_correction_rate',
+    'curvature_mean', 'raw_timing_entropy', 'timing_kurtosis',
+  ]
+  const signedZ = DIRECTIONAL_KEYS
+    .filter(key => !Number.isNaN(features[key]) && baselines[key].std > 0)
+    .map(key => (features[key] - baselines[key].mean) / baselines[key].std)
+  if (signedZ.length >= 3) {
+    const meanSignedZ = signedZ.reduce((a, b) => a + b, 0) / signedZ.length
+    if (meanSignedZ < -0.4) {
+      // Gradient: -0.4 → no penalty, -0.8 → floor at 0.20
+      const multiplier = Math.max(0.20, 1.0 + (meanSignedZ + 0.4) * 2.0)
+      score *= multiplier
+    }
+  }
+
+  // Gate 3: K-H1 probe-motor continuity.
+  // Near-zero with probe data means motor stream died during cognitive task —
+  // the observe-reason-act serialization signature.
+  if (!Number.isNaN(features.probe_motor_continuity) && features.probe_motor_continuity < 0.1) {
+    score *= 0.5
+  }
+
   if (Number.isNaN(score)) return { score: 0, zScores }
   return { score: Math.max(0, Math.min(1, score)), zScores }
 }

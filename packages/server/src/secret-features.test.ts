@@ -162,7 +162,118 @@ describe('scoreSecretFeatures', () => {
       sub_movement_count: 0,
       acceleration_asymmetry: 1,
       curvature_mean: 0,
+      raw_timing_entropy: 0,
+      probe_motor_continuity: 0,
+      coalesced_event_ratio: 1,
     })
     expect(score).toBeLessThan(0.9)
+  })
+
+  it('excludes NaN features from scoring (unsupported browser)', () => {
+    // With NaN coalesced_event_ratio, scorer should skip it entirely
+    const withNaN = scoreSecretFeatures({
+      velocity_autocorrelation: 0.83,
+      micro_correction_rate: 0.70,
+      sub_movement_count: 65,
+      acceleration_asymmetry: 1.01,
+      curvature_mean: 620,
+      raw_timing_entropy: 5.17,
+      probe_motor_continuity: 0.5,
+      coalesced_event_ratio: NaN,
+      timing_kurtosis: 12.0,
+    })
+    // Same features but with a valid coalesced_event_ratio near baseline
+    const withValid = scoreSecretFeatures({
+      velocity_autocorrelation: 0.83,
+      micro_correction_rate: 0.70,
+      sub_movement_count: 65,
+      acceleration_asymmetry: 1.01,
+      curvature_mean: 620,
+      raw_timing_entropy: 5.17,
+      probe_motor_continuity: 0.5,
+      coalesced_event_ratio: 3.0, // At baseline mean
+      timing_kurtosis: 12.0,
+    })
+    // NaN version should not be penalized (score should be similar or higher
+    // than version with a value at the mean)
+    expect(withNaN.score).toBeGreaterThan(0)
+    expect(withNaN.zScores.coalesced_event_ratio).toBe(0)
+  })
+})
+
+describe('K-H1: probe_motor_continuity', () => {
+  it('returns NaN when no probes provided (excluded from scoring)', () => {
+    const features = extractSecretFeatures(makeHumanTrace())
+    expect(features.probe_motor_continuity).toBeNaN() // No probe data → excluded
+  })
+
+  it('detects motor continuity during probe window for human trace', () => {
+    const events = makeHumanTrace()
+    // Simulate a probe at t=2500ms (middle of trace)
+    const probeTimings = [{ probe_shown_at: 2500, reaction_time_ms: 800 }]
+    const features = extractSecretFeatures(events, probeTimings)
+    // Human should have events in the probe window
+    expect(features.probe_motor_continuity).toBeGreaterThan(0.1)
+  })
+
+  it('returns 0 when probes issued but client omits responses (empty array)', () => {
+    const features = extractSecretFeatures(makeHumanTrace(), [])
+    expect(features.probe_motor_continuity).toBe(0) // Empty = evasion, not excluded
+  })
+
+  it('detects zero motor activity for agent-like gap', () => {
+    // Create trace with a gap at t=2500
+    const events: RawEvent[] = []
+    for (let i = 0; i < 300; i++) {
+      const t = i * 16.67
+      // Skip events in the 2000-3000ms range (simulating agent pause)
+      if (t >= 2000 && t <= 3000) continue
+      events.push({
+        t,
+        x: 0.05 + (i / 300) * 0.9,
+        y: 0.05 + Math.sin(i * 0.1) * 0.05,
+        type: i === 0 ? 'down' : 'move',
+      })
+    }
+    const probeTimings = [{ probe_shown_at: 2500, reaction_time_ms: 1200 }]
+    const features = extractSecretFeatures(events, probeTimings)
+    expect(features.probe_motor_continuity).toBe(0)
+  })
+})
+
+describe('K-H2: coalesced_event_ratio', () => {
+  it('returns NaN when no coalesced_count data (excluded from scoring)', () => {
+    const features = extractSecretFeatures(makeHumanTrace())
+    expect(features.coalesced_event_ratio).toBeNaN()
+  })
+
+  it('computes ratio from coalesced_count', () => {
+    const events: RawEvent[] = []
+    for (let i = 0; i < 100; i++) {
+      events.push({
+        t: i * 16.67,
+        x: 0.05 + (i / 100) * 0.9,
+        y: 0.5,
+        type: i === 0 ? 'down' : 'move',
+        coalesced_count: i === 0 ? undefined : 3, // Simulating 120Hz mouse
+      })
+    }
+    const features = extractSecretFeatures(events)
+    expect(features.coalesced_event_ratio).toBeCloseTo(3, 0)
+  })
+
+  it('detects synthetic CDP dispatch (coalesced_count=1)', () => {
+    const events: RawEvent[] = []
+    for (let i = 0; i < 100; i++) {
+      events.push({
+        t: i * 16.67,
+        x: 0.05 + (i / 100) * 0.9,
+        y: 0.5,
+        type: i === 0 ? 'down' : 'move',
+        coalesced_count: 1,
+      })
+    }
+    const features = extractSecretFeatures(events)
+    expect(features.coalesced_event_ratio).toBe(1)
   })
 })

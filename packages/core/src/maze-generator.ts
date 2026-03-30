@@ -245,11 +245,18 @@ export function validatePath(
     y: Math.min(Math.floor(p.y * maze.height), maze.height - 1),
   }))
 
+  // Find first occurrence of maze.start (events before the start cell are discarded
+  // noise from the collector reset timing — the drag handler resets mid-event).
+  const startIdx = cells.findIndex(
+    (c) => c.x === maze.start.x && c.y === maze.start.y,
+  )
+  if (startIdx === -1) return false
+
   // Build a connected path, skipping non-adjacent pointer noise.
   // Each accepted cell must be orthogonally adjacent to the previous
   // accepted cell with no wall between them.
-  const connected: Point[] = [cells[0]]
-  for (let i = 1; i < cells.length; i++) {
+  const connected: Point[] = [cells[startIdx]]
+  for (let i = startIdx + 1; i < cells.length; i++) {
     const prev = connected[connected.length - 1]
     // Same cell — skip
     if (cells[i].x === prev.x && cells[i].y === prev.y) continue

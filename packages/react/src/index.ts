@@ -9,7 +9,7 @@ export {
   requestWebAuthnAuthentication,
   requestWebAuthnRegistration,
 } from './webauthn.js'
-export type { CernoProps } from './Cerno.js'
+export type { CernoProps, VerifyResult } from './Cerno.js'
 export type { MazeCanvasProps } from './MazeCanvas.js'
 export type { StroopOverlayProps } from './StroopOverlay.js'
 

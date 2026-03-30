@@ -38,6 +38,14 @@ function injectProbeStyles() {
   probeStylesInjected = true
 }
 
+/** Shape overlays for accessibility (K-H1/D7: color should not be the sole differentiator) */
+const SHAPES = ['circle', 'square', 'triangle'] as const
+type ShapeType = typeof SHAPES[number]
+
+function shapeForIndex(i: number): ShapeType {
+  return SHAPES[i % SHAPES.length]
+}
+
 export interface StroopOverlayProps {
   probe: StroopProbe
   mazeWidth: number
@@ -45,6 +53,8 @@ export interface StroopOverlayProps {
   cellSize: number
   theme: 'light' | 'dark'
   onComplete: (response: ProbeResponse) => void
+  /** Mouse collector start time (performance.now() base) for K-H1 probe_shown_at */
+  collectorStartTime?: number
 }
 
 export function StroopOverlay({
@@ -54,10 +64,15 @@ export function StroopOverlay({
   cellSize,
   theme,
   onComplete,
+  collectorStartTime,
 }: StroopOverlayProps) {
   injectProbeStyles()
 
   const [startTime] = useState(() => performance.now())
+  // K-H1: probe_shown_at relative to collector start for motor-stream correlation
+  const probeShownAt = collectorStartTime != null && collectorStartTime >= 0
+    ? startTime - collectorStartTime
+    : undefined
   const completedRef = useRef(false)
 
   const margin = RENDERING.MARGIN
@@ -81,9 +96,10 @@ export function StroopOverlay({
         tapped_cell: { x: cell.x, y: cell.y },
         reaction_time_ms: Math.round(reactionTime),
         correct: cell.isTarget,
+        probe_shown_at: probeShownAt != null ? Math.round(probeShownAt) : undefined,
       })
     },
-    [probe, startTime, onComplete],
+    [probe, startTime, onComplete, probeShownAt],
   )
 
   // Auto-timeout after 5 seconds (fail)
@@ -96,6 +112,7 @@ export function StroopOverlay({
         tapped_cell: { x: -1, y: -1 },
         reaction_time_ms: 5000,
         correct: false,
+        probe_shown_at: probeShownAt != null ? Math.round(probeShownAt) : undefined,
       })
     }, 5000)
     return () => clearTimeout(timer)
@@ -155,29 +172,41 @@ export function StroopOverlay({
           gap: 12,
         }}
       >
-        {probe.cells.map((cell) => (
-          <button
-            key={`${cell.x}-${cell.y}`}
-            type="button"
-            aria-label={`${colorName(cell.color)} square`}
-            onClick={() => handleCellTap(cell)}
-            style={{
-              width: buttonSize,
-              height: buttonSize,
-              borderRadius: 'var(--cerno-radius)',
-              border: '2px solid var(--cerno-border)',
-              background: cell.color,
-              cursor: 'pointer',
-              transition: 'transform 0.1s',
-            }}
-            onMouseDown={(e) => {
-              (e.target as HTMLElement).style.transform = 'scale(0.95)'
-            }}
-            onMouseUp={(e) => {
-              (e.target as HTMLElement).style.transform = 'scale(1)'
-            }}
-          />
-        ))}
+        {probe.cells.map((cell, i) => {
+          const shape = shapeForIndex(i)
+          return (
+            <button
+              key={`${cell.x}-${cell.y}`}
+              type="button"
+              aria-label={`${colorName(cell.color)} ${shape}`}
+              onClick={() => handleCellTap(cell)}
+              style={{
+                width: buttonSize,
+                height: buttonSize,
+                borderRadius: 'var(--cerno-radius)',
+                border: '2px solid var(--cerno-border)',
+                background: cell.color,
+                cursor: 'pointer',
+                transition: 'transform 0.1s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseDown={(e) => {
+                (e.target as HTMLElement).style.transform = 'scale(0.95)'
+              }}
+              onMouseUp={(e) => {
+                (e.target as HTMLElement).style.transform = 'scale(1)'
+              }}
+            >
+              <svg width={buttonSize * 0.4} height={buttonSize * 0.4} viewBox="0 0 20 20" style={{ opacity: 0.3, pointerEvents: 'none' }}>
+                {shape === 'circle' && <circle cx="10" cy="10" r="8" fill="white" />}
+                {shape === 'square' && <rect x="2" y="2" width="16" height="16" fill="white" />}
+                {shape === 'triangle' && <polygon points="10,2 18,18 2,18" fill="white" />}
+              </svg>
+            </button>
+          )
+        })}
       </div>
 
       <div

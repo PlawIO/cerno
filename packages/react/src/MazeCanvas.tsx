@@ -11,6 +11,8 @@ export interface MazeCanvasProps {
   onCellVisit?: (cell: { x: number; y: number }, events: RawEvent[], inputMode: 'pointer' | 'keyboard') => void
   paused?: boolean
   size?: 'normal' | 'compact'
+  /** Ref callback to expose mouse collector's start time for K-H1 probe-motor correlation */
+  onCollectorStartTime?: (getStartTime: () => number) => void
 }
 
 interface DragState {
@@ -29,6 +31,7 @@ export function MazeCanvas({
   onCellVisit,
   paused = false,
   size = 'normal',
+  onCollectorStartTime,
 }: MazeCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -271,6 +274,7 @@ export function MazeCanvas({
     const mc = createMouseCollector(canvas)
     mouseCollectorRef.current = mc
     mc.start()
+    onCollectorStartTime?.(() => mc.getStartTime())
 
     return () => {
       mc.stop()
@@ -397,6 +401,19 @@ export function MazeCanvas({
     drag.currentCell = null
     draw()
   }, [draw, paused])
+
+  // P1 fix: Reset drag state when entering paused mode (probe overlay).
+  // Without this, pointerUp during a probe is ignored (paused=true), leaving
+  // a stale drag that resumes on hover when the probe closes.
+  useEffect(() => {
+    if (paused && dragRef.current.dragging) {
+      dragRef.current.dragging = false
+      dragRef.current.path = []
+      dragRef.current.visitedCells.clear()
+      dragRef.current.currentCell = null
+      draw()
+    }
+  }, [paused, draw])
 
   // Keyboard mode: watch for arrow key presses and check exit
   useEffect(() => {

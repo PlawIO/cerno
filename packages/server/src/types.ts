@@ -60,6 +60,8 @@ export interface ScoringContext {
   challengeId?: string
   siteKey?: string
   reputationData?: ReputationData | null
+  /** K-H1: Probe timing data for motor-stream correlation analysis */
+  probeTimings?: Array<{ probe_shown_at: number; reaction_time_ms: number }>
 }
 
 export interface SecretFeaturesProvider {
@@ -135,6 +137,8 @@ export interface ValidationEvent {
   score: number
   error_code?: string
   features?: BehavioralFeatures
+  /** Raw secret feature values (for baseline calibration) */
+  secret_features?: Record<string, number>
   secret_feature_scores?: Record<string, number>
   input_type?: InputMode
   duration_ms: number
@@ -154,6 +158,14 @@ export interface CreateChallengeRequest {
    * same rate-limit identity. Do not accept this directly from browsers.
    */
   rate_limit_binding?: string
+  /** Per-challenge maze difficulty override (0-1). Used by CernoBattery for 5-maze assessment. */
+  maze_difficulty?: number
+  /** Per-challenge maze width override. */
+  maze_width?: number
+  /** Per-challenge maze height override. */
+  maze_height?: number
+  /** Session ID binding. Stored in challenge record for cross-challenge validation. */
+  session_id?: string
 }
 
 // ── Reputation (Phase 3) ──
@@ -196,6 +208,12 @@ export interface ServerConfig {
   rateLimitWindowMs?: number
   /** Server-derived rate-limit identity. */
   rateLimitKey?: (request: ValidationRequest) => string | Promise<string>
+
+  // ── Phase K ──
+  /** Allow per-challenge maze overrides (width, height, difficulty) from the request.
+   *  Default false. Only enable for trusted server-side callers (e.g., /prove battery).
+   *  When false, request.maze_width/height/difficulty are ignored. */
+  allowChallengeOverrides?: boolean
 
   // ── Phase 2 ──
   /** Enable server-only secret feature scoring (default true) */

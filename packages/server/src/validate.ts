@@ -90,7 +90,7 @@ const DEFAULTS = {
   powDifficulty: 18,
   challengeTtlMs: 120_000,
   tokenTtlMs: 60_000,
-  scoreThreshold: 0.6,
+  scoreThreshold: 0.72,
   calibrationScoreThreshold: 0.3,
   maxAttempts: 3,
   rateLimitWindowMs: 300_000,
@@ -122,9 +122,16 @@ export async function createChallenge(
   const id = globalThis.crypto.randomUUID()
   const mazeSeed = globalThis.crypto.getRandomValues(new Uint32Array(1))[0]
   const powChallenge = randomHex(16)
-  const mazeWidth = config.mazeWidth ?? DEFAULTS.mazeWidth
-  const mazeHeight = config.mazeHeight ?? DEFAULTS.mazeHeight
-  const mazeDifficulty = config.mazeDifficulty ?? DEFAULTS.mazeDifficulty
+  // Per-challenge overrides (Phase K battery) only honored when config opts in.
+  // Without allowChallengeOverrides, an untrusted client via middleware cannot
+  // downgrade difficulty or shrink the maze to weaken behavioral signal collection.
+  const clamp = (v: number | undefined, min: number, max: number, fallback: number) =>
+    v != null ? Math.max(min, Math.min(max, Math.floor(v))) : fallback
+  const overrides = config.allowChallengeOverrides ? request : ({} as typeof request)
+  const mazeWidth = clamp(overrides.maze_width, 4, 16, config.mazeWidth ?? DEFAULTS.mazeWidth)
+  const mazeHeight = clamp(overrides.maze_height, 4, 16, config.mazeHeight ?? DEFAULTS.mazeHeight)
+  const rawDiff = overrides.maze_difficulty ?? config.mazeDifficulty ?? DEFAULTS.mazeDifficulty
+  const mazeDifficulty = Math.max(0.01, Math.min(1, rawDiff))
   const ttl = config.challengeTtlMs ?? DEFAULTS.challengeTtlMs
   const now = Date.now()
 
@@ -173,6 +180,7 @@ export async function createChallenge(
     public_key_hash: publicKeyHash,
     cell_size: config.cellSize ?? RENDERING.CELL_SIZE,
     rate_limit_binding_hash: rateLimitBindingHash,
+    session_id: request.session_id,
     requirements: {
       probe: {
         mode: 'off',
@@ -295,6 +303,19 @@ export async function validateSubmission(
       ? await sha256Hex(request.rate_limit_binding)
       : ''
     if (requestRateLimitHash !== challenge.rate_limit_binding_hash) {
+      await emit({ error_code: ErrorCode.CHALLENGE_NOT_FOUND })
+      return {
+        success: false,
+        error_code: ErrorCode.CHALLENGE_NOT_FOUND,
+      }
+    }
+  }
+
+  // 2e. Verify session_id matches (if bound at issuance, prevents cross-session replay).
+  // If the challenge was issued with a session_id, the request MUST provide the same one.
+  // Omitting it is a rejection (prevents bypass via empty/missing field).
+  if (challenge.session_id) {
+    if (!request.session_id || challenge.session_id !== request.session_id) {
       await emit({ error_code: ErrorCode.CHALLENGE_NOT_FOUND })
       return {
         success: false,
@@ -481,8 +502,34 @@ export async function validateSubmission(
     ? await store.getReputation(repKey)
     : null
 
+  // K-H1: Build probe timing data for motor-stream correlation
+  // Cross-validate: probe_id must match a challenge-issued probe, timestamps must fall
+  // within trace time range, count capped at challenge probe count.
+  const traceEnd = correctedEvents.length > 0
+    ? correctedEvents[correctedEvents.length - 1].t
+    : 0
+  const challengeProbeIds = new Set(challenge.probes?.map(p => p.id) ?? [])
+  // Only accept probe timings if the challenge actually issued probes.
+  // Without this gate, a client can fabricate probe_responses on plain maze challenges.
+  // If probes were issued but client omits probe_responses, treat as zero motor
+  // continuity (empty array) so the K-H1 gate fires instead of being bypassed.
+  const hasIssuedProbes = challengeProbeIds.size > 0
+  const probeTimings = hasIssuedProbes
+    ? (request.probe_responses
+        ?.filter(pr =>
+          pr.probe_shown_at != null &&
+          pr.probe_shown_at >= 0 &&
+          pr.probe_shown_at <= traceEnd + 1000 && // allow 1s slack for async dispatch
+          challengeProbeIds.has(pr.probe_id), // must match issued probe
+        )
+        .slice(0, challengeProbeIds.size) // never accept more probes than issued
+        .map(pr => ({ probe_shown_at: pr.probe_shown_at!, reaction_time_ms: pr.reaction_time_ms }))
+      ) ?? [] // P2 fix: missing probe_responses → empty array → probe_motor_continuity=0
+    : undefined
+
   // 10b. Secret feature scoring (Phase 2 + Phase G provider)
   let secretZScores: Record<string, number> | undefined
+  let rawSecretFeatures: Record<string, number> | undefined
   if (config.secretFeaturesProvider) {
     // Managed service: use pluggable provider
     const ctx: ScoringContext = {
@@ -494,6 +541,7 @@ export async function validateSubmission(
       challengeId: challenge.id,
       siteKey: challenge.site_key,
       reputationData: repData,
+      probeTimings,
     }
     try {
       const result = await config.secretFeaturesProvider.score(ctx)
@@ -501,14 +549,16 @@ export async function validateSubmission(
       score = score * publicWeight + Math.max(0, Math.min(1, result.score)) * secretWeight
     } catch {
       // Provider failed, fall back to built-in scoring
-      const secretFeatures = extractSecretFeatures(correctedEvents)
+      const secretFeatures = extractSecretFeatures(correctedEvents, probeTimings)
+      rawSecretFeatures = secretFeatures as unknown as Record<string, number>
       const secretResult = scoreSecretFeatures(secretFeatures, derivedInputType, scoringConfig)
       secretZScores = secretResult.zScores
       score = score * publicWeight + secretResult.score * secretWeight
     }
   } else if (config.enableSecretFeatures !== false) {
     // Built-in default (ships in npm, good baseline for self-hosters)
-    const secretFeatures = extractSecretFeatures(correctedEvents)
+    const secretFeatures = extractSecretFeatures(correctedEvents, probeTimings)
+    rawSecretFeatures = secretFeatures as unknown as Record<string, number>
     const secretResult = scoreSecretFeatures(secretFeatures, derivedInputType, scoringConfig)
     secretZScores = secretResult.zScores
     score = score * publicWeight + secretResult.score * secretWeight
@@ -535,6 +585,7 @@ export async function validateSubmission(
     await emit({
       error_code: ErrorCode.BEHAVIORAL_REJECTED,
       features,
+      secret_features: rawSecretFeatures,
       secret_feature_scores: secretZScores,
       feature_z_scores: allZScores,
       input_type: derivedInputType,
@@ -576,6 +627,7 @@ export async function validateSubmission(
     success: true,
     score,
     features,
+    secret_features: rawSecretFeatures,
     secret_feature_scores: secretZScores,
     feature_z_scores: allZScores,
     input_type: derivedInputType,
@@ -585,5 +637,7 @@ export async function validateSubmission(
   return {
     success: true,
     token,
+    score,
+    input_type: derivedInputType,
   }
 }

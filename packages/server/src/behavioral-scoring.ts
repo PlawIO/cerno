@@ -24,7 +24,8 @@ const MOUSE_MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
   jerk_std:          { mean: 5e-7,   std: 5e-7,    weight: 1.0 },
   // Human inter-event timing follows log-normal (CV ~0.3-0.7).
   // Constant-speed bots produce CV ~0; uniform-random bots ~0.577.
-  timing_cv:         { mean: 0.5,    std: 0.2,     weight: 1.0 },
+  // Widened std to avoid false rejections on real desktop users.
+  timing_cv:         { mean: 0.5,    std: 0.3,     weight: 0.8 },
 }
 
 /**
@@ -39,10 +40,13 @@ const MOUSE_MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
 const TOUCH_MOTOR_BASELINES: Pick<Record<FeatureKey, FeatureBaseline>,
   'velocity_std' | 'movement_onset_ms' | 'jerk_std' | 'timing_cv'
 > = {
-  velocity_std:      { mean: 0.0006, std: 0.0004,  weight: 1.0 },
+  velocity_std:      { mean: 0.0006, std: 0.0005,  weight: 1.0 },
   movement_onset_ms: { mean: 500,    std: 300,     weight: 0.6 },
   jerk_std:          { mean: 8e-7,   std: 6e-7,    weight: 1.0 },
-  timing_cv:         { mean: 0.6,    std: 0.25,    weight: 1.0 },
+  // Touch timing CV is wildly variable across devices and OS touch stacks.
+  // Real mobile users produce timing_cv from 0.3 to 2.5+. Old std=0.25
+  // caused z=7.5 instant-rejection on legitimate mobile users.
+  timing_cv:         { mean: 0.8,    std: 0.8,     weight: 0.6 },
 }
 
 /**

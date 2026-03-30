@@ -224,11 +224,20 @@ function friendlyError(code?: string, fallback?: string): string {
 
 // ── Types ──
 
+export interface VerifyResult {
+  token: string
+  challengeId: string
+  score?: number
+  inputType?: string
+}
+
 export interface CernoProps {
   siteKey: string
   sessionId: string
   stableId?: string
   onVerify: (token: string) => void
+  /** Richer verification callback with challenge ID and score (Phase K) */
+  onVerifyResult?: (result: VerifyResult) => void
   onError?: (error: Error) => void
   onExpire?: () => void
   theme?: 'light' | 'dark'
@@ -304,6 +313,7 @@ export function Cerno({
   sessionId,
   stableId,
   onVerify,
+  onVerifyResult,
   onError,
   onExpire,
   theme = 'light',
@@ -322,6 +332,10 @@ export function Cerno({
   const completedProbeIdsRef = useRef<Set<string>>(new Set())
   const activeProbeTicketRef = useRef<string | null>(null)
   const armingProbeIdRef = useRef<string | null>(null)
+  const collectorStartTimeGetterRef = useRef<(() => number) | null>(null)
+  const probeResponsesRef = useRef<import('@cernosh/core').ProbeResponse[]>([])
+  const onVerifyResultRef = useRef(onVerifyResult)
+  onVerifyResultRef.current = onVerifyResult
 
   const keyPairRef = useRef<{ publicKeyBase64: string; privateKey: CryptoKey } | null>(null)
   const keyPairPromiseRef = useRef<Promise<{ publicKeyBase64: string; privateKey: CryptoKey }> | null>(null)
@@ -376,6 +390,7 @@ export function Cerno({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           site_key: siteKey,
+          session_id: sessionId || undefined,
           stable_id: stableId,
           public_key: keyPairRef.current?.publicKeyBase64,
           client_capabilities: clientCapabilities,
@@ -394,6 +409,7 @@ export function Cerno({
       activeProbeTicketRef.current = null
       armingProbeIdRef.current = null
       probeCompletionTokensRef.current = []
+      probeResponsesRef.current = []
       completedProbeIdsRef.current = new Set()
 
       // Generate maze from seed (dimensions and difficulty come from server challenge)
@@ -439,7 +455,7 @@ export function Cerno({
       setErrorMsg(friendlyError(undefined, error.message))
       onError?.(error)
     }
-  }, [apiUrl, siteKey, size, clearExpiry, onError, onExpire])
+  }, [apiUrl, siteKey, sessionId, size, clearExpiry, onError, onExpire])
 
   // Fetch challenge on mount
   useEffect(() => {
@@ -492,6 +508,10 @@ export function Cerno({
             probeCompletionTokensRef.current.length > 0
               ? [...probeCompletionTokensRef.current]
               : undefined,
+          probe_responses:
+            probeResponsesRef.current.length > 0
+              ? [...probeResponsesRef.current]
+              : undefined,
           webauthn: webauthn ?? undefined,
         }
 
@@ -513,6 +533,12 @@ export function Cerno({
           setState('verified')
           clearExpiry()
           onVerify(result.token)
+          onVerifyResultRef.current?.({
+            token: result.token,
+            challengeId: challenge.id,
+            score: (result as any).score,
+            inputType: (result as any).input_type,
+          })
         } else {
           const nextAttempts = attempts + 1
           setAttempts(nextAttempts)
@@ -576,6 +602,7 @@ export function Cerno({
       }
 
       probeCompletionTokensRef.current.push(result.completion_token)
+      probeResponsesRef.current.push(response)
       completedProbeIdsRef.current.add(response.probe_id)
       activeProbeTicketRef.current = null
       armingProbeIdRef.current = null
@@ -763,34 +790,12 @@ export function Cerno({
     )
   }
 
-  // state === 'probe' (showing Stroop overlay)
-  if (state === 'probe' && activeProbe && maze) {
-    const cellSz = size === 'compact' ? 28 : RENDERING.CELL_SIZE
-    return (
-      <div style={{ ...containerStyle, position: 'relative' }} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
-        <MazeCanvas maze={maze} theme={theme} onPathComplete={() => {}} paused size={size} />
-        <StroopOverlay
-          probe={activeProbe}
-          mazeWidth={maze.width}
-          mazeHeight={maze.height}
-          cellSize={cellSz}
-          theme={theme}
-          onComplete={handleProbeComplete}
-        />
-        <div style={statusStyle}>
-          <Spinner />
-          Quick verification...
-        </div>
-        <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
-          Verifying your response
-        </div>
-      </div>
-    )
-  }
-
-  // state === 'ready' | 'solving'
+  // state === 'ready' | 'solving' | 'probe'
+  // Probe overlays on top of the SAME MazeCanvas (paused) so the mouse collector
+  // stays alive. This is critical for K-H1: motor events must continue during probes.
+  const cellSz = size === 'compact' ? 28 : RENDERING.CELL_SIZE
   return (
-    <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
+    <div style={{ ...containerStyle, position: 'relative' }} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
       {maze && (
         <MazeCanvas
           maze={maze}
@@ -799,6 +804,18 @@ export function Cerno({
           onCellVisit={handleCellVisit}
           paused={state === 'probe'}
           size={size}
+          onCollectorStartTime={(getter) => { collectorStartTimeGetterRef.current = getter }}
+        />
+      )}
+      {state === 'probe' && activeProbe && maze && (
+        <StroopOverlay
+          probe={activeProbe}
+          mazeWidth={maze.width}
+          mazeHeight={maze.height}
+          cellSize={cellSz}
+          theme={theme}
+          onComplete={handleProbeComplete}
+          collectorStartTime={collectorStartTimeGetterRef.current?.()}
         />
       )}
       {expiryWarning && (state === 'ready' || state === 'solving') && (

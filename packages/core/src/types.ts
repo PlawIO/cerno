@@ -10,6 +10,8 @@ export interface RawEvent {
   type: 'move' | 'down' | 'up' | 'keydown' | 'keyup'
   key?: string
   pointer_type?: PointerType
+  /** Number of coalesced pointer events in this frame (K-H2: event coalescing forensics) */
+  coalesced_count?: number
 }
 
 // ── Maze types ──
@@ -108,6 +110,8 @@ export interface Challenge {
   probes?: StroopProbe[]
   /** Scoring config version pinned at issuance (for safe rotation) */
   scoring_version?: string
+  /** Session ID bound at issuance, used to tie multiple challenges together (Phase K battery) */
+  session_id?: string
 }
 
 export interface ValidationRequest {
@@ -129,6 +133,8 @@ export interface ValidationRequest {
   rate_limit_binding?: string
   /** Signed server-issued completion tokens for armed probes. */
   probe_completion_tokens?: string[]
+  /** Client-reported probe responses with timing data (K-H1: probe-motor correlation) */
+  probe_responses?: ProbeResponse[]
   /** Optional WebAuthn assertion for this challenge. */
   webauthn?: WebAuthnAuthenticationResponseJSON
 }
@@ -137,6 +143,10 @@ export interface ValidationResult {
   success: boolean
   token?: string
   error_code?: string
+  /** Final blended score (0-1), returned on success for Phase K battery */
+  score?: number
+  /** Detected input type */
+  input_type?: InputMode
 }
 
 // ── Input mode ──
@@ -183,6 +193,8 @@ export interface ProbeResponse {
   reaction_time_ms: number
   /** Client-side correctness hint for analytics; server recomputes correctness and does not trust this field. */
   correct?: boolean
+  /** Timestamp when probe was shown, relative to mouse-collector start time (K-H1: probe-motor correlation) */
+  probe_shown_at?: number
 }
 
 // ── Challenge types (Phase 3) ──

@@ -193,8 +193,9 @@ describe('validate pipeline', () => {
 
     expect(result.success).toBe(true)
     expect(result.token).toBeDefined()
-    // Score is stripped from external response (B3)
-    expect((result as any).score).toBeUndefined()
+    // K1: score and input_type now returned for Phase K battery
+    expect(result.score).toBeGreaterThan(0)
+    expect(result.input_type).toBeDefined()
   })
 
   it('rejects unknown challenge_id', async () => {
@@ -369,6 +370,25 @@ describe('validate pipeline', () => {
       site_key: 'site-beta', // Different from 'site-alpha'
       session_id: 'session-mismatch',
       maze_seed: challenge.maze_seed,
+      events: [],
+      pow_proof: { nonce: 0, hash: 'bad' },
+      public_key: 'pk',
+      timestamp: Date.now(),
+    })
+    expect(result.success).toBe(false)
+    expect(result.error_code).toBe('challenge_not_found')
+  })
+
+  it('rejects cross-session replay (session_id mismatch)', async () => {
+    const challenge = await createChallenge(config, {
+      site_key: 'test-site',
+      session_id: 'session-A',
+    })
+
+    const result = await validateSubmission(config, {
+      challenge_id: challenge.id,
+      site_key: 'test-site',
+      session_id: 'session-B', // Different from 'session-A'
       events: [],
       pow_proof: { nonce: 0, hash: 'bad' },
       public_key: 'pk',
