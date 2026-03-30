@@ -1,6 +1,6 @@
 {
   "name": "@cernosh/server",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Server-side validation pipeline for Cerno CAPTCHA: maze-relative behavioral scoring, PoW verification, JWT tokens, CaptchaStore interface",
   "license": "Apache-2.0",
   "repository": {
@@ -9,7 +9,14 @@
     "directory": "packages/server"
   },
   "homepage": "https://cerno.sh",
-  "keywords": ["captcha", "behavioral-biometrics", "server", "validation", "jwt", "anti-bot"],
+  "keywords": [
+    "captcha",
+    "behavioral-biometrics",
+    "server",
+    "validation",
+    "jwt",
+    "anti-bot"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,7 +34,9 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@cernosh/core": "^0.2.0",
     "@simplewebauthn/server": "^13.2.2",
