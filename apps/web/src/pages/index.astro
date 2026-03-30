@@ -208,7 +208,7 @@ const enableReactGrab = import.meta.env.DEV
 <span class="kw">function</span> <span class="fn">ProtectedForm</span>() {"{"}
   <span class="kw">return</span> (
     &lt;<span class="lit">Cerno</span>
-      <span class="prop">siteKey</span>=<span class="str">"your-site-key"</span>
+      <span class="prop">siteKey</span>=<span class="str">"ck_05a716da..."</span>
       <span class="prop">sessionId</span>={"{"}session.id{"}"}
       <span class="prop">onVerify</span>={"{"}(token) =&gt; <span class="fn">submit</span>(token){"}"}
     /&gt;
@@ -274,8 +274,8 @@ const enableReactGrab = import.meta.env.DEV
         --accent-deep: #1d7898;
         --accent-text: #042f2e;
         --nav-bg: rgba(255, 255, 255, 0.9);
-        --canvas-bg: #ffffff;
-        --canvas-wall: #d6d3d1;
+        --canvas-bg: #f8fafc;
+        --canvas-wall: #1e293b;
         --scrollbar: rgba(0,0,0,0.1);
         --mono: 'Geist Mono', ui-monospace, monospace;
         --sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
@@ -295,8 +295,8 @@ const enableReactGrab = import.meta.env.DEV
         --accent-deep: #5bbde0;
         --accent-text: #b2e7fb;
         --nav-bg: rgba(13, 10, 9, 0.9);
-        --canvas-bg: #1a1614;
-        --canvas-wall: #504944;
+        --canvas-bg: #0f172a;
+        --canvas-wall: #cbd5e1;
         --scrollbar: rgba(255,245,230,0.1);
         color-scheme: dark;
       }
@@ -951,6 +951,76 @@ const enableReactGrab = import.meta.env.DEV
         });
       });
 
+      // ── API config ──
+      var API_URL = 'https://api.cerno.sh';
+      var SITE_KEY = 'ck_05a716da870416d96af00ef30d7808f0';
+      var SESSION_ID = 'demo-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+      // ── Crypto: ECDSA keypair (same as @cernosh/react crypto-binding) ──
+      var ecKeyPair = null;
+      async function genKeyPair() {
+        var kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+        var jwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+        return { publicKeyBase64: btoa(JSON.stringify(jwk)), privateKey: kp.privateKey };
+      }
+      async function signBinding(payload, privateKey) {
+        var data = new TextEncoder().encode(payload);
+        var sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, data);
+        var bytes = new Uint8Array(sig);
+        var binary = '';
+        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary);
+      }
+
+      // ── PoW solver (same as @cernosh/react) ──
+      function hasLeadingZeroBits(buffer, bits) {
+        var view = new Uint8Array(buffer);
+        var remaining = bits;
+        for (var i = 0; i < view.length && remaining > 0; i++) {
+          if (remaining >= 8) { if (view[i] !== 0) return false; remaining -= 8; }
+          else { if ((view[i] & (0xff << (8 - remaining))) !== 0) return false; remaining = 0; }
+        }
+        return true;
+      }
+      function arrayBufToHex(buffer) {
+        var b = new Uint8Array(buffer);
+        var hex = '';
+        for (var i = 0; i < b.length; i++) hex += b[i].toString(16).padStart(2, '0');
+        return hex;
+      }
+      function startPow(challenge, difficulty) {
+        var cancelled = false;
+        var cancelFn = function() { cancelled = true; };
+        var promise = new Promise(function(resolve, reject) {
+          try {
+            var workerCode = 'const ctx=self;function h(b,bits){const v=new Uint8Array(b);let r=bits;for(let i=0;i<v.length&&r>0;i++){if(r>=8){if(v[i]!==0)return false;r-=8}else{if((v[i]&(255<<(8-r)))!==0)return false;r=0}}return true}function t(b){const a=new Uint8Array(b);let s="";for(let i=0;i<a.length;i++)s+=a[i].toString(16).padStart(2,"0");return s}const e=new TextEncoder();async function solve(c,d){let n=0;while(n<10000000){for(let i=0;i<1000&&n<10000000;i++){const hash=await crypto.subtle.digest("SHA-256",e.encode(c+n));if(h(hash,d)){ctx.postMessage({nonce:n,hash:t(hash)});return}n++}await new Promise(r=>setTimeout(r,0))}}ctx.addEventListener("message",e2=>{solve(e2.data.c,e2.data.d)})';
+            var blob = new Blob([workerCode], { type: 'application/javascript' });
+            var url = URL.createObjectURL(blob);
+            var worker = new Worker(url);
+            worker.onmessage = function(e) { URL.revokeObjectURL(url); if (!cancelled) resolve(e.data); };
+            worker.onerror = function() { URL.revokeObjectURL(url); worker.terminate(); fallback(); };
+            worker.postMessage({ c: challenge, d: difficulty });
+            cancelFn = function() { cancelled = true; worker.terminate(); };
+          } catch (_) { fallback(); }
+          async function fallback() {
+            var encoder = new TextEncoder();
+            var nonce = 0;
+            while (nonce < 10000000) {
+              if (cancelled) { reject(new Error('cancelled')); return; }
+              for (var i = 0; i < 500 && nonce < 10000000; i++) {
+                var hash = await crypto.subtle.digest('SHA-256', encoder.encode(challenge + nonce));
+                if (hasLeadingZeroBits(hash, difficulty)) { resolve({ nonce: nonce, hash: arrayBufToHex(hash) }); return; }
+                nonce++;
+              }
+              await new Promise(function(r) { setTimeout(r, 0); });
+            }
+            reject(new Error('PoW exceeded max iterations'));
+          }
+        });
+        promise.cancel = cancelFn;
+        return promise;
+      }
+
       // ── mulberry32 seeded PRNG (exact copy from @cernosh/core) ──
       function mulberry32(seed) {
         var s = seed | 0;
@@ -970,9 +1040,10 @@ const enableReactGrab = import.meta.env.DEV
       var OPP = {}; OPP[W_N] = W_S; OPP[W_S] = W_N; OPP[W_E] = W_W; OPP[W_W] = W_E;
 
       // ── Growing Tree maze generation (exact algorithm from @cernosh/core) ──
-      var MW = 7, MH = 7, DIFF = 0.3;
+      var MW, MH, DIFF;
 
-      function generateMaze(seed) {
+      function generateMaze(seed, width, height, difficulty) {
+        MW = width; MH = height; DIFF = difficulty;
         var rand = mulberry32(seed);
         var grid = [];
         for (var y = 0; y < MH; y++) {
@@ -1062,22 +1133,26 @@ const enableReactGrab = import.meta.env.DEV
         return [start, exit];
       }
 
-      // ── Canvas rendering (matches @cernosh/react MazeCanvas) ──
-      var CELL = 36, MARGIN = 16;
+      // ── Canvas rendering (matches @cernosh/react MazeCanvas exactly) ──
+      var CELL = 40, MARGIN = 20, TEXT_H = 24;
       var canvas = document.getElementById('maze-canvas');
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
-      var logW = MW * CELL + MARGIN * 2;
-      var logH = MH * CELL + MARGIN * 2;
-      var maze, dragState;
+      var logW, logH, maze, dragState;
+
+      function recalcDimensions() {
+        logW = MW * CELL + MARGIN * 2;
+        logH = MH * CELL + MARGIN * 2 + TEXT_H;
+      }
 
       function resizeCanvas() {
         var dpr = window.devicePixelRatio || 1;
         var dispW = canvas.clientWidth;
-        var scale = dispW / logW;
+        var scaleX = dispW / logW;
         canvas.width = dispW * dpr;
-        canvas.height = dispW * dpr; // square
-        ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+        canvas.height = (logH * scaleX) * dpr;
+        canvas.style.height = (logH * scaleX) + 'px';
+        ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleX, 0, 0);
       }
 
       function cellCenter(cx, cy) {
@@ -1103,14 +1178,22 @@ const enableReactGrab = import.meta.env.DEV
       }
 
       function drawMaze() {
+        if (!maze) return;
         resizeCanvas();
-        var cs = getComputedStyle(document.documentElement);
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
         // Background
-        ctx.fillStyle = cs.getPropertyValue('--canvas-bg').trim();
+        ctx.fillStyle = isDark ? '#0f172a' : '#f8fafc';
         ctx.fillRect(0, 0, logW, logH);
 
+        // Instruction text on canvas (matches real MazeCanvas)
+        ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+        ctx.font = '13px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Trace the path from green to red', logW / 2, logH - 8);
+
         // Walls
-        ctx.strokeStyle = cs.getPropertyValue('--canvas-wall').trim();
+        ctx.strokeStyle = isDark ? '#cbd5e1' : '#1e293b';
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         for (var y = 0; y < MH; y++) {
@@ -1128,19 +1211,19 @@ const enableReactGrab = import.meta.env.DEV
         var sc = cellCenter(maze.start.x, maze.start.y);
         ctx.fillStyle = '#22c55e';
         ctx.beginPath();
-        ctx.arc(sc.px, sc.py, CELL * 0.3, 0, Math.PI * 2);
+        ctx.arc(sc.px, sc.py, 12 * (CELL / 40), 0, Math.PI * 2);
         ctx.fill();
 
         // Exit marker (red circle)
         var ec = cellCenter(maze.exit.x, maze.exit.y);
         ctx.fillStyle = '#ef4444';
         ctx.beginPath();
-        ctx.arc(ec.px, ec.py, CELL * 0.3, 0, Math.PI * 2);
+        ctx.arc(ec.px, ec.py, 12 * (CELL / 40), 0, Math.PI * 2);
         ctx.fill();
 
         // User trace
         if (dragState && dragState.path.length > 1) {
-          ctx.strokeStyle = '#2596be';
+          ctx.strokeStyle = '#3b82f6';
           ctx.lineWidth = 3;
           ctx.lineJoin = 'round';
           ctx.lineCap = 'round';
@@ -1303,18 +1386,28 @@ const enableReactGrab = import.meta.env.DEV
         return Math.max(0, Math.min(1, score));
       }
 
-      // ── Interaction ──
+      // ── Server state ──
+      var challengeData = null;
+      var powPromise = null;
       var rawEvents = [];
       var completed = false;
 
+      // ── Interaction ──
       function canvasCoords(e) {
         var rect = canvas.getBoundingClientRect();
-        var scale = logW / rect.width;
-        return { px: (e.clientX - rect.left) * scale, py: (e.clientY - rect.top) * scale };
+        var scaleX = logW / rect.width;
+        var scaleY = logH / rect.height;
+        return { px: (e.clientX - rect.left) * scaleX, py: (e.clientY - rect.top) * scaleY };
+      }
+
+      function ptrType(e) {
+        var pt = e.pointerType;
+        if (pt === 'mouse' || pt === 'touch' || pt === 'pen') return pt;
+        return 'mouse';
       }
 
       canvas.addEventListener('pointerdown', function(e) {
-        if (completed) return;
+        if (completed || !maze) return;
         var coords = canvasCoords(e);
         var cell = pxToCell(coords.px, coords.py);
         if (!cell || cell.x !== maze.start.x || cell.y !== maze.start.y) return;
@@ -1326,8 +1419,8 @@ const enableReactGrab = import.meta.env.DEV
           visited: new Set([cell.x + ',' + cell.y]),
           current: cell
         };
-        rawEvents = [{ x: coords.px / logW, y: coords.py / logH, t: performance.now() }];
-        document.getElementById('score-hint').textContent = 'Tracing...';
+        rawEvents = [{ x: coords.px / logW, y: coords.py / logH, t: performance.now(), type: 'down', pointer_type: ptrType(e) }];
+        setHint('Tracing...');
         drawMaze();
       });
 
@@ -1335,13 +1428,12 @@ const enableReactGrab = import.meta.env.DEV
         if (!dragState || !dragState.dragging || completed) return;
         var coords = canvasCoords(e);
         var now = performance.now();
-        rawEvents.push({ x: coords.px / logW, y: coords.py / logH, t: now });
+        rawEvents.push({ x: coords.px / logW, y: coords.py / logH, t: now, type: 'move', pointer_type: ptrType(e) });
 
         var cell = pxToCell(coords.px, coords.py);
         if (!cell || !dragState.current) return;
         if (cell.x === dragState.current.x && cell.y === dragState.current.y) {
-          // Still same cell, just update score display
-          if (rawEvents.length > 10) updateDisplay(false);
+          if (rawEvents.length > 10) updateFeatureDisplay();
           return;
         }
         if (!canPass(dragState.current.x, dragState.current.y, cell.x, cell.y)) return;
@@ -1370,11 +1462,13 @@ const enableReactGrab = import.meta.env.DEV
         if (cell.x === maze.exit.x && cell.y === maze.exit.y) {
           completed = true;
           dragState.dragging = false;
-          updateDisplay(true);
+          rawEvents.push({ x: coords.px / logW, y: coords.py / logH, t: performance.now(), type: 'up', pointer_type: ptrType(e) });
+          updateFeatureDisplay();
+          submitToServer();
         }
       });
 
-      canvas.addEventListener('pointerup', function() {
+      canvas.addEventListener('pointerup', function(e) {
         if (!dragState || !dragState.dragging) return;
         dragState.dragging = false;
         dragState.path = [];
@@ -1384,7 +1478,14 @@ const enableReactGrab = import.meta.env.DEV
         drawMaze();
       });
 
-      function updateDisplay(final) {
+      // ── Display helpers ──
+      function setHint(text, color) {
+        var el = document.getElementById('score-hint');
+        el.textContent = text;
+        el.style.color = color || '';
+      }
+
+      function updateFeatureDisplay() {
         var feat = extractFeatures(rawEvents);
         if (!feat) return;
 
@@ -1409,36 +1510,116 @@ const enableReactGrab = import.meta.env.DEV
         var sv = document.getElementById('score-value');
         sv.textContent = score.toFixed(2);
         sv.style.color = score > 0.6 ? '#16a34a' : '#dc2626';
-
-        if (final) {
-          document.getElementById('score-hint').textContent =
-            score > 0.6 ? 'Pass' : 'Reject';
-        }
       }
 
-      // ── Init ──
-      function init() {
-        var seed = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
-        maze = generateMaze(seed);
-        dragState = null;
-        completed = false;
-        rawEvents = [];
-        // Reset score display
+      function resetDisplay() {
         document.querySelectorAll('.bar-fill').forEach(function(b) { b.style.width = '0%'; });
         document.querySelectorAll('.val').forEach(function(v) { v.textContent = '\u2014'; });
         document.getElementById('score-value').textContent = '\u2014';
         document.getElementById('score-value').style.color = '';
-        document.getElementById('score-hint').textContent = 'Trace from green to red';
-        drawMaze();
+      }
+
+      // ── Server: submit verification ──
+      async function submitToServer() {
+        if (!challengeData) {
+          // Local-only fallback — show local score
+          var feat = extractFeatures(rawEvents);
+          var score = feat ? scoreFeatures(feat) : 0;
+          setHint(score > 0.6 ? 'Human verified — not an agent' : 'Behavioral pattern rejected', score > 0.6 ? '#16a34a' : '#dc2626');
+          return;
+        }
+        setHint('Verifying...');
+        try {
+          var pow = await powPromise;
+          var binding = challengeData.id + ':' + challengeData.site_key + ':' + challengeData.expires_at;
+          var signature = await signBinding(binding, ecKeyPair.privateKey);
+
+          var res = await fetch(API_URL + '/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              challenge_id: challengeData.id,
+              site_key: SITE_KEY,
+              session_id: SESSION_ID,
+              events: rawEvents,
+              pow_proof: pow,
+              public_key: ecKeyPair.publicKeyBase64,
+              signature: signature,
+              timestamp: Date.now()
+            })
+          });
+
+          var result = await res.json();
+          if (result.success) {
+            setHint('Human verified — not an agent', '#16a34a');
+          } else {
+            setHint(result.error_code || 'Behavioral pattern rejected', '#dc2626');
+          }
+        } catch (err) {
+          setHint('Server: ' + err.message, '#dc2626');
+        }
+      }
+
+      // ── Server: fetch challenge and init maze ──
+      async function fetchChallenge() {
+        resetDisplay();
+        setHint('Loading challenge...');
+        dragState = null;
+        completed = false;
+        rawEvents = [];
+        if (powPromise && powPromise.cancel) powPromise.cancel();
+
+        try {
+          if (!ecKeyPair) ecKeyPair = await genKeyPair();
+
+          var res = await fetch(API_URL + '/challenge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              site_key: SITE_KEY,
+              public_key: ecKeyPair.publicKeyBase64
+            })
+          });
+
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          challengeData = await res.json();
+
+          // Generate maze from server challenge (exact same algorithm)
+          CELL = challengeData.cell_size || 40;
+          maze = generateMaze(
+            challengeData.maze_seed,
+            challengeData.maze_width,
+            challengeData.maze_height,
+            challengeData.maze_difficulty
+          );
+          recalcDimensions();
+
+          // Start PoW in background
+          powPromise = startPow(challengeData.pow_challenge, challengeData.pow_difficulty);
+
+          setHint('Trace from green to red');
+          drawMaze();
+        } catch (err) {
+          // Fallback to local-only mode if API unreachable
+          console.warn('Cerno API unavailable, local demo:', err.message);
+          challengeData = null;
+          CELL = 40;
+          var seed = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
+          maze = generateMaze(seed, 7, 7, 0.3);
+          recalcDimensions();
+          setHint('Trace from green to red');
+          drawMaze();
+        }
       }
 
       document.getElementById('new-maze').addEventListener('click', function(e) {
         e.preventDefault();
-        init();
+        SESSION_ID = 'demo-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        fetchChallenge();
       });
 
       window.addEventListener('resize', function() { drawMaze(); });
-      init();
+      fetchChallenge();
 
       // ── Theme toggle ──
       var modes = ['auto', 'light', 'dark'];
