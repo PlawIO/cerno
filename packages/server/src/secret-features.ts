@@ -64,7 +64,7 @@ const SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
   raw_timing_entropy:        { mean: 2.0,   std: 0.9,    weight: 0.3 },
   probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 1.0 },
   coalesced_event_ratio:     { mean: 3.0,   std: 1.5,    weight: 1.0 },
-  timing_kurtosis:           { mean: 12.0,  std: 8.5,    weight: 1.0 },
+  timing_kurtosis:           { mean: 100.0, std: 80.0,   weight: 1.0 },
 }
 
 /**
@@ -81,7 +81,7 @@ const TOUCH_SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
   raw_timing_entropy:        { mean: 2.0,   std: 1.0,    weight: 0.3 },
   probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 1.0 },
   coalesced_event_ratio:     { mean: 1.5,   std: 1.0,    weight: 0.6 },
-  timing_kurtosis:           { mean: 10.0,  std: 10.0,   weight: 0.8 },
+  timing_kurtosis:           { mean: 80.0,  std: 70.0,   weight: 0.8 },
 }
 
 /**
@@ -444,17 +444,19 @@ export function scoreSecretFeatures(
     score *= multiplier
   }
 
-  // Gate 2: Directional bias detection.
-  // Bots are systematically BELOW human means on kinematic features
-  // (vel_ac, micro-corrections, curvature, entropy, kurtosis). Humans
-  // scatter randomly above and below. Signed z-score mean (production calibrated):
-  //   Human:     mean=0.004, range [-0.40, +0.41]
-  //   Naive bot: mean=-1.19,  range [-1.74, -0.72]  → caught by lower gate at -0.4
-  //   Tuned bot: mean=+1.21,  range [+1.15, +1.53]  → caught by upper gate at +0.8
-  // Dual gates: under-shoot = lazy/random movement, over-shoot = mechanical sharp turns.
+  // Gate 2: Directional bias detection (4 kinematic features: VKA, MCR, CM, RTE).
+  // Bots are systematically off-center vs humans. Signed z-score mean (production calibrated):
+  //   Human:     mean≈0, range [-0.40, +0.60]
+  //   Naive bot: mean≈-1.19, range [-1.74, -0.72]  → lower gate at -0.4
+  //   Tuned bot: mean≈+1.57, range [+1.20, +1.80]  → upper gate at +0.8
+  // Lower = lazy/random movement. Upper = mechanical sharp-turn paths.
+  // timing_kurtosis intentionally excluded: high TK is a human signal (Chrome
+  // 60Hz polling produces peaked interval distribution, kurtosis 60-220).
+  // Including it here would penalize real users via the over-shoot gate.
+  // TK is still scored via Gaussian above and catches bots in Gate 1 (TK < 3).
   const DIRECTIONAL_KEYS: Array<keyof SecretFeatures> = [
     'velocity_autocorrelation', 'micro_correction_rate',
-    'curvature_mean', 'raw_timing_entropy', 'timing_kurtosis',
+    'curvature_mean', 'raw_timing_entropy',
   ]
   const signedZ = DIRECTIONAL_KEYS
     .filter(key => !Number.isNaN(features[key]) && baselines[key].std > 0)
