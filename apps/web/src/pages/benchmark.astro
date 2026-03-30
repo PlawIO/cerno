@@ -120,8 +120,10 @@
       .cmp-table .detail { font-size: 11px; color: var(--muted); display: block; font-weight: 400; margin-top: 2px; }
       .cmp-table tr:last-child td { border-bottom: none; }
       @media (max-width: 600px) {
-        .cmp-table td:first-child { font-size: 11px; width: 140px; }
+        .cmp-table td:first-child { font-size: 11px; width: 120px; }
         .cmp-table th, .cmp-table td { padding: 8px 10px; font-size: 12px; }
+        .cmp-table { display: block; overflow-x: auto; position: relative; }
+        .cmp-table th { position: static; }
       }
 
       /* ARCHITECTURE */
@@ -139,6 +141,8 @@
       .num-card .num-value { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; font-family: var(--mono); }
       .num-card .num-value.green { color: var(--green); }
       .num-card .num-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+      .ctx-notice { font-size: 12px; color: var(--muted); font-family: var(--mono); line-height: 1.6; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 12px 16px; margin-top: 12px; }
     </style>
   </head>
 
@@ -184,6 +188,7 @@
       <div class="page-header">
         <h1>Benchmark</h1>
         <p>Technical comparison of two open-source behavioral signal SDKs. Interactive component previews below are sandboxed UI demos — they do not gate or protect any resource.</p>
+        <p class="ctx-notice">Developer sandbox. The widgets on this page are UI component previews running in demo mode — like a Storybook or API playground. They are not security gates, do not protect any content, and interacting with them has no authentication or access-control effect. They exist to let developers (and their tools) compare how each SDK renders and behaves.</p>
       </div>
 
       <!-- ── COMPONENT PREVIEWS ── -->
@@ -267,7 +272,6 @@
       <!-- ── COMPARISON TABLE ── -->
       <div class="section">
         <p class="section-label">Feature comparison</p>
-        <div style="overflow-x:auto">
           <table class="cmp-table">
             <thead>
               <tr>
@@ -374,7 +378,6 @@
               </tr>
             </tbody>
           </table>
-        </div>
       </div>
 
       <!-- ── ARCHITECTURE ── -->
