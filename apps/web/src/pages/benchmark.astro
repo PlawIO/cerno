@@ -298,17 +298,17 @@
               </tr>
               <tr>
                 <td>Behavioral features</td>
-                <td><span class="y">12</span><span class="detail">7 public + 5 secret (server-only, never exposed to client)</span></td>
+                <td><span class="y">12+</span><span class="detail">Public features + server-only secret features, never exposed to client</span></td>
                 <td>12+<span class="detail">Power law, spectral timing, jerk, sub-movement, micro-jitter + ball-specific</span></td>
               </tr>
               <tr>
                 <td>Secret features</td>
-                <td><span class="y">Yes</span><span class="detail">5 features computed server-side, never in client bundle or API response</span></td>
+                <td><span class="y">Yes</span><span class="detail">Additional features computed server-side, never in client bundle or API response</span></td>
                 <td><span class="n">No</span><span class="detail">All scoring logic is in server package but no client/server feature split</span></td>
               </tr>
               <tr>
                 <td>Directional bias gate</td>
-                <td><span class="y">Yes</span><span class="detail">Signed z-score mean across 5 features. Bots &lt; -0.5, humans &gt; -0.4. Zero overlap.</span></td>
+                <td><span class="y">Yes</span><span class="detail">Server-side anomaly detection with clear separation between human and bot distributions</span></td>
                 <td><span class="n">No</span></td>
               </tr>
               <tr>
@@ -363,7 +363,7 @@
               </tr>
               <tr>
                 <td>Scoring threshold</td>
-                <td>0.72<span class="detail">Combined public (60%) + secret (40%) score</span></td>
+                <td>0.72<span class="detail">Combined public + secret feature score</span></td>
                 <td>0.45 human / 0.25 bot<span class="detail">Behavioral (55%) + challenge-specific (45%)</span></td>
               </tr>
               <tr>
@@ -393,8 +393,8 @@
               Client <span class="arrow">&rarr;</span> submit events + PoW + ECDSA sig<br>
               Server <span class="arrow">&rarr;</span> regenerate maze from seed<br>
               Server <span class="arrow">&rarr;</span> validate path traversal<br>
-              Server <span class="arrow">&rarr;</span> extract 12 features + score<br>
-              Server <span class="arrow">&rarr;</span> directional bias + kurtosis gates<br>
+              Server <span class="arrow">&rarr;</span> extract behavioral features + score<br>
+              Server <span class="arrow">&rarr;</span> anomaly detection gates<br>
               Server <span class="arrow">&rarr;</span> pass/fail token
             </div>
           </div>
