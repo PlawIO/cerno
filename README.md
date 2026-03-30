@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@cernosh/react?color=0ea5e9&label=%40cernosh%2Freact)](https://www.npmjs.com/package/@cernosh/react)
 [![npm](https://img.shields.io/npm/v/@cernosh/server?color=0ea5e9&label=%40cernosh%2Fserver)](https://www.npmjs.com/package/@cernosh/server)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
-[![Tests](https://img.shields.io/badge/tests-128%20passing-22c55e)](./packages)
+[![Tests](https://img.shields.io/badge/tests-167%20passing-22c55e)](./packages)
 
 AI browser agents can solve reCAPTCHA. They pass hCaptcha. They click checkboxes, recognize traffic lights, and type text. What they cannot do is move a mouse like a human.
 
@@ -33,18 +33,19 @@ User sees:          Server measures:
   start  exit          raw pointer events. Things AI cannot fake.
 ```
 
-**The 6 features:**
+**Public features** (7 behavioral metrics extracted from raw pointer events):
 
-| Feature | What it measures | Why AI fails |
-|---------|-----------------|--------------|
-| `velocity_std` | Speed variance across the trace | Bots move at constant velocity |
-| `path_efficiency` | Euclidean / actual distance | Bots take straight-line paths |
-| `pause_count` | Hesitations >100ms | Bots don't pause at decision points |
-| `movement_onset_ms` | Reaction time before first move | Bots start instantly |
-| `jerk_std` | Third derivative of position | Human muscle control is jerky |
-| `angular_velocity_entropy` | Randomness in direction changes | Bot paths have low directional entropy |
+| Feature | What it measures |
+|---------|-----------------|
+| `velocity_std` | Speed variance across the trace |
+| `path_efficiency` | Euclidean vs. actual path distance |
+| `pause_count` | Hesitations >100ms |
+| `movement_onset_ms` | Reaction time before first move |
+| `jerk_std` | Third derivative of position |
+| `angular_velocity_entropy` | Randomness in direction changes |
+| `timing_cv` | Coefficient of variation of inter-event timing |
 
-All features are re-extracted server-side from raw events. The client cannot lie about them.
+All features are re-extracted server-side from raw events. The server also computes additional secret features not present in the client SDK.
 
 ---
 
@@ -175,27 +176,9 @@ The optional `stableId` prop enables cross-session reputation tracking. **It mus
 
 No ML on the hot path. Pure deterministic math. **Maze-relative baselines.**
 
-For each feature, we compute a z-score against baselines, then apply a sigmoid transform:
+Features are scored against baselines adapted to each maze's topology. An easy 4x4 maze produces different human behavior than a complex 12x12. Cerno computes a `MazeProfile` from the maze structure and derives expected feature ranges accordingly.
 
-```
-featureScore = 1 / (1 + |value - baseline.mean| / baseline.std)
-finalScore   = weightedAverage(featureScores) × penalties
-```
-
-**Two kinds of baselines:**
-
-| Type | Features | Source |
-|------|----------|--------|
-| Motor control (maze-independent) | `velocity_std`, `jerk_std`, `movement_onset_ms` | Static. These measure how you move, not where. |
-| Topology-dependent (maze-relative) | `path_efficiency`, `pause_count`, `angular_velocity_entropy` | Computed from THIS maze's BFS solution, decision points, and turn count. |
-
-Published mouse-movement baselines assume free-form movement. A maze constrains the path. A human solving an easy 4x4 maze behaves differently than one solving a complex 12x12. Hardcoded baselines would reject real humans on easy mazes and miss bots on hard ones. Cerno computes a `MazeProfile` (solution length, decision point count, turn count, optimal efficiency) and derives expected feature ranges from the maze topology.
-
-Penalties for:
-- **Low sample count** (<20 points): not enough data is suspicious
-- **Fast completion** (<2s): humans don't solve mazes instantly
-
-Threshold: 0.5 (configurable). Calibration mode drops it to 0.3 for initial deployments while you collect real user data.
+The scoring pipeline applies penalties for suspicious patterns (insufficient data, impossibly fast completion) and produces a final score from 0 to 1. The threshold is configurable via `ScoringConfig`.
 
 ---
 
@@ -264,33 +247,7 @@ POST /siteverify  →  { success, challenge_id?, session_id?, site_key?, error? 
 ```bash
 bun install
 bun run build   # all packages + landing page
-bun test        # 128 tests across 17 files
-```
-
-```
-Test Files  17 passed
-     Tests  128 passed
-
-packages/core:
-  seeded-prng.test.ts        4 tests  (determinism, range, distribution)
-  maze-generator.test.ts    19 tests  (determinism, solvability, wall integrity, maze profiles)
-  feature-extractor.test.ts 11 tests  (human vs bot, 120Hz resampling, edge cases)
-  stroop-probe.test.ts       6 tests  (probe generation, trigger validity, determinism)
-
-packages/server:
-  adaptive-pow.test.ts      10 tests  (difficulty scaling and clamps)
-  adversarial-eval.test.ts   4 tests  (ROC, FPR/TPR, feature-tuned bots)
-  behavioral-scoring.test.ts 13 tests  (baselines, maze-relative adaptation, NaN guard, penalties)
-  config.test.ts             6 tests  (production-mode hard failures)
-  pow-verify.test.ts          4 tests  (valid/invalid proofs, difficulty)
-  probe-flow.test.ts          1 test   (server-timed arm/complete token flow)
-  probe-validator.test.ts    10 tests  (correctness and timing bounds)
-  reputation.test.ts          7 tests  (stateful trust updates and bonuses)
-  secret-features.test.ts     7 tests  (server-only motion metrics)
-  siteverify.test.ts          5 tests  (server-to-server token verification)
-  token.test.ts               5 tests  (JWT round-trip, replay prevention, session binding)
-  validate.test.ts           13 tests  (e2e round-trip, binding checks, replay, WebAuthn issuance)
-  webauthn.test.ts            3 tests  (registration fixture, assertion fixture, full validateSubmission path)
+bun test        # 167 tests across 18 files
 ```
 
 ---

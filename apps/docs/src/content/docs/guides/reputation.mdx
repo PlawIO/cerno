@@ -29,52 +29,17 @@ The reputation system tracks six motor-control features across sessions:
 | `angular_velocity_entropy` | Randomness in direction changes |
 | `timing_cv` | Coefficient of variation in timing |
 
-Feature means are blended using an exponential moving average (EMA) with a decay factor of **0.95**:
+Feature means are blended using an exponential moving average (EMA), creating a behavioral fingerprint that evolves with each session.
 
-```
-newMean = previousMean × 0.95 + currentValue × 0.05
-```
+## Trust scoring
 
-## EMA scoring
+When a returning user completes a challenge, the final trust score blends the current session score, historical trust, and behavioral consistency. The result is clamped to `[0, 1]`.
 
-When a returning user completes a challenge, the final trust score is a weighted blend:
-
-| Weight | Component | Description |
-|--------|-----------|-------------|
-| **60%** | Session score | Current challenge behavioral score |
-| **20%** | Historical trust | Previous trust_score from the store |
-| **20%** | Consistency | How close current features are to stored means |
-
-```
-blendedScore = score × 0.6 + existing.trust_score × 0.2 + consistency × 0.2
-```
-
-The result is clamped to `[0, 1]`.
-
-### Consistency calculation
-
-For each tracked feature, compute relative deviation from the stored mean and apply a negative exponential:
-
-```
-deviation = |current - mean| / |mean|
-featureConsistency = exp(-deviation × 2)
-consistency = average(featureConsistency across all features)
-```
-
-Low deviation produces values close to 1 (high consistency). High deviation drops toward 0.
+Consistent behavior across sessions earns a trust bonus. Large deviations from the stored fingerprint reduce it.
 
 ## Decay mechanics
 
-Trust decays when a user is absent. After **7 days** without a session, stored trust erodes:
-
-```
-decayFactor = 0.9 ^ (staleDays / 7)
-effectiveTrust = trust_score × decayFactor
-```
-
-At 7 days stale, trust drops to 90% of stored value. At 14 days, 81%. At 30 days, roughly 65%.
-
-Records expire entirely after **30 days** (the default TTL on the KV entry).
+Trust decays when a user is absent. After a period of inactivity, stored trust erodes progressively. Records expire entirely after the configured TTL (default 30 days).
 
 ## API reference
 
