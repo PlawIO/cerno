@@ -1,10 +1,20 @@
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import path from 'node:path'
-import { reactGrabClaudeCodeHead, reactGrabClaudeCodePlugin } from '../../scripts/react-grab-claude-code.mjs'
+import fs from 'node:fs'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
 const isDevelopment = process.env.NODE_ENV === 'development'
+
+// Dev-only plugin — not committed to the public repo
+let reactGrabClaudeCodePlugin = () => null
+let reactGrabClaudeCodeHead = []
+const scriptPath = path.join(repoRoot, 'scripts/react-grab-claude-code.mjs')
+if (isDevelopment && fs.existsSync(scriptPath)) {
+  const mod = await import(scriptPath)
+  reactGrabClaudeCodePlugin = mod.reactGrabClaudeCodePlugin
+  reactGrabClaudeCodeHead = mod.reactGrabClaudeCodeHead
+}
 
 export default defineConfig({
   site: 'https://cerno.sh',

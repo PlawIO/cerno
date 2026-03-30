@@ -1,9 +1,16 @@
 import { defineConfig } from 'astro/config'
 import fs from 'node:fs'
 import path from 'node:path'
-import { reactGrabClaudeCodePlugin } from '../../scripts/react-grab-claude-code.mjs'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
+
+// Dev-only plugin — not committed to the public repo
+let reactGrabClaudeCodePlugin = () => null
+const scriptPath = path.join(repoRoot, 'scripts/react-grab-claude-code.mjs')
+if (process.env.NODE_ENV === 'development' && fs.existsSync(scriptPath)) {
+  const mod = await import(scriptPath)
+  reactGrabClaudeCodePlugin = mod.reactGrabClaudeCodePlugin
+}
 
 const reactGrabScripts = [
   '<script src="//unpkg.com/react-grab/dist/index.global.js" crossorigin="anonymous"></script>',
