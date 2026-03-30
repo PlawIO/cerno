@@ -109,9 +109,9 @@
       #oo-container .oo-fallback .oo-err { font-family: var(--mono); font-size: 12px; color: var(--red); background: var(--red-bg); padding: 6px 12px; border-radius: 3px; display: inline-block; margin-top: 4px; }
 
       /* COMPARISON TABLE */
-      .cmp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .cmp-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
       .cmp-table th, .cmp-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
-      .cmp-table th { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--muted); background: var(--surface); position: sticky; top: 56px; z-index: 1; }
+      .cmp-table th { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--muted); background: var(--surface); position: sticky; top: 56px; z-index: 1; box-shadow: 0 1px 0 var(--border-strong); }
       .cmp-table td:first-child { font-family: var(--mono); font-size: 12px; color: var(--secondary); white-space: nowrap; width: 200px; }
       .cmp-table td:nth-child(2) { font-weight: 500; }
       .cmp-table .y { color: var(--green); }
@@ -223,7 +223,7 @@
                   <p id="oo-error-msg"></p>
                 </div>
               </div>
-              <p class="panel-note">Loaded from npm CDN &middot; requires self-hosted Go/Node server for challenges &middot; no hosted API available</p>
+              <p class="panel-note">Loaded from npm CDN &middot; server protocol mocked client-side for demo &middot; normally requires self-hosted Go/Node server</p>
             </div>
           </div>
 
@@ -569,8 +569,108 @@
         cFetch();
 
         // ════════════════════════════════════════════
-        // 007CAPTCHA — Load real widget from CDN
+        // 007CAPTCHA — Mock server + CDN widget
         // ════════════════════════════════════════════
+
+        // Mock the 007captcha server protocol (fetch + EventSource) so the real
+        // CDN widget runs without a backend. Intercepts /captcha/ball/* URLs.
+        (function installMock() {
+          var origFetch = window.fetch;
+          var OrigES = window.EventSource;
+          var activeSession = null;
+          var PAIRS = [
+            {bg:'#1a1a2e',ball:'#e94560'},{bg:'#0f3460',ball:'#e94560'},
+            {bg:'#16213e',ball:'#53b8bb'},{bg:'#1b262c',ball:'#bbe1fa'},
+            {bg:'#2c3e50',ball:'#e74c3c'},{bg:'#1a1a2e',ball:'#ffd700'},
+            {bg:'#0b0b45',ball:'#ff6b6b'},{bg:'#1c1c3d',ball:'#48dbfb'},
+            {bg:'#2d132c',ball:'#ee5a24'},{bg:'#0a3d62',ball:'#78e08f'}
+          ];
+          var SHAPES = ['circle','square','triangle','diamond'];
+          var sessionPair = null, sessionShape = null;
+
+          window.fetch = function(url, opts) {
+            var u = typeof url === 'string' ? url : (url && url.url) || '';
+            if (u.indexOf('/captcha/ball/') !== -1 && u.indexOf('/start') !== -1) {
+              activeSession = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+                .map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+              sessionPair = PAIRS[Math.floor(Math.random()*PAIRS.length)];
+              sessionShape = SHAPES[Math.floor(Math.random()*4)];
+              return Promise.resolve(new Response(JSON.stringify({
+                sessionId: activeSession,
+                visuals: {bgColor:sessionPair.bg, ballColor:sessionPair.ball, ballShape:sessionShape}
+              }),{status:200,headers:{'Content-Type':'application/json'}}));
+            }
+            if (u.indexOf('/captcha/ball/') !== -1 && u.indexOf('/verify') !== -1) {
+              return Promise.resolve(new Response(JSON.stringify({
+                success:true, score:0.72, verdict:'human',
+                token: btoa(JSON.stringify({cid:activeSession,method:'ball',score:0.72,verdict:'human',ts:Date.now()}))+'.mock'
+              }),{status:200,headers:{'Content-Type':'application/json'}}));
+            }
+            return origFetch.apply(this, arguments);
+          };
+
+          function MockES(url) {
+            if (!(url && /\/captcha\/ball\/[^/]+\/stream/.test(url))) return new OrigES(url);
+            this.url = url; this.readyState = 0; this._ls = {}; this._iv = null;
+            this.onopen = null; this.onmessage = null; this.onerror = null;
+            var self = this;
+            setTimeout(function(){
+              self.readyState = 1;
+              if (self.onopen) self.onopen(new Event('open'));
+              streamBall(self);
+            }, 60);
+          }
+          MockES.prototype.addEventListener = function(t,fn){if(!this._ls[t])this._ls[t]=[];this._ls[t].push(fn);};
+          MockES.prototype.removeEventListener = function(t,fn){if(!this._ls[t])return;this._ls[t]=this._ls[t].filter(function(f){return f!==fn;});};
+          MockES.prototype.dispatchEvent = function(e){var hs=this._ls[e.type]||[];for(var i=0;i<hs.length;i++)hs[i](e);};
+          MockES.prototype.close = function(){this.readyState=2;if(this._iv){clearInterval(this._iv);this._iv=null;}};
+          MockES.CONNECTING=0; MockES.OPEN=1; MockES.CLOSED=2;
+          window.EventSource = MockES;
+
+          function streamBall(es) {
+            var cvs = document.createElement('canvas'); cvs.width=240; cvs.height=200;
+            var ctx = cvs.getContext('2d');
+            var bg = sessionPair ? sessionPair.bg : '#1a1a2e';
+            var bc = sessionPair ? sessionPair.ball : '#e94560';
+            var sh = sessionShape || 'circle';
+            var bx=120, by=100, rad=10, pad=14;
+            var a0 = Math.random()*Math.PI*2, spd=20;
+            var vx=Math.cos(a0)*spd, vy=Math.sin(a0)*spd, tvx=vx, tvy=vy;
+            var dirT=0, nDir=600+Math.random()*600;
+            var colT=0, nCol=1000+Math.random()*2000;
+            var elapsed=0, tick=0;
+
+            es._iv = setInterval(function(){
+              if(es.readyState===2){clearInterval(es._iv);return;}
+              var dt=1000/60; elapsed+=dt; dirT+=dt; colT+=dt; tick++;
+
+              if(dirT>=nDir){dirT=0;nDir=500+Math.random()*700;var a2=Math.random()*Math.PI*2;var s2=9+Math.random()*26;tvx=Math.cos(a2)*s2;tvy=Math.sin(a2)*s2;}
+              if(colT>=nCol){colT=0;nCol=800+Math.random()*2200;if(Math.random()>0.3){var p=PAIRS[Math.floor(Math.random()*PAIRS.length)];bg=p.bg;bc=p.ball;}}
+
+              var lp=Math.min(1,dt/200);
+              vx+=(tvx-vx)*lp; vy+=(tvy-vy)*lp;
+              bx+=vx*dt/1000; by+=vy*dt/1000;
+
+              if(bx<pad+rad){bx=pad+rad;vx=Math.abs(vx)*0.85;tvx=Math.abs(tvx);}
+              if(bx>240-pad-rad){bx=240-pad-rad;vx=-Math.abs(vx)*0.85;tvx=-Math.abs(tvx);}
+              if(by<pad+rad){by=pad+rad;vy=Math.abs(vy)*0.85;tvy=Math.abs(tvy);}
+              if(by>200-pad-rad){by=200-pad-rad;vy=-Math.abs(vy)*0.85;tvy=-Math.abs(tvy);}
+
+              if(tick%3===0 && es.readyState===1){
+                ctx.fillStyle=bg; ctx.fillRect(0,0,240,200);
+                ctx.fillStyle=bc; ctx.beginPath();
+                if(sh==='circle'){ctx.arc(bx,by,rad,0,Math.PI*2);}
+                else if(sh==='square'){ctx.rect(bx-rad,by-rad,rad*2,rad*2);}
+                else if(sh==='triangle'){ctx.moveTo(bx,by-rad);ctx.lineTo(bx-rad,by+rad);ctx.lineTo(bx+rad,by+rad);ctx.closePath();}
+                else{ctx.moveTo(bx,by-rad);ctx.lineTo(bx+rad,by);ctx.lineTo(bx,by+rad);ctx.lineTo(bx-rad,by);ctx.closePath();}
+                ctx.fill();
+                var b64=cvs.toDataURL('image/png').split(',')[1];
+                es.dispatchEvent(new MessageEvent('frame',{data:JSON.stringify({img:b64,t:elapsed})}));
+              }
+              if(elapsed>=8000){clearInterval(es._iv);es._iv=null;es.dispatchEvent(new MessageEvent('end',{data:'{}'}));}
+            }, 1000/60);
+          }
+        })();
 
         var ooBadge = document.getElementById('oo-badge');
         var ooStatus = document.getElementById('oo-status');
@@ -580,14 +680,12 @@
         var script = document.createElement('script');
         script.src = 'https://unpkg.com/@007captcha/client@0.1.0/dist/umd/index.global.js';
         script.onload = function() {
-          ooBadge.textContent = 'CDN';
-          ooBadge.className = 'badge badge-offline';
-          ooStatus.textContent = 'Widget loaded';
+          ooBadge.textContent = 'DEMO';
+          ooBadge.className = 'badge badge-live';
+          ooStatus.textContent = 'Ready';
 
           if (typeof OOSevenCaptcha !== 'undefined' && OOSevenCaptcha.render) {
             try {
-              // Render with a non-existent server. Widget should show its initial UI.
-              // When user clicks Start, the fetch to serverUrl will fail.
               OOSevenCaptcha.render({
                 siteKey: 'benchmark-demo',
                 serverUrl: 'https://007captcha-benchmark.invalid',
@@ -599,11 +697,11 @@
                   ooStatus.style.color = 'var(--green)';
                 },
                 onFailure: function(err) {
-                  ooStatus.textContent = 'Server required';
+                  ooStatus.textContent = 'Error';
                   ooStatus.style.color = 'var(--red)';
                 }
               });
-              ooStatus.textContent = 'Click Start (requires server)';
+              ooStatus.textContent = 'Click to start';
             } catch(e) {
               ooFallback.style.display = '';
               ooErrorMsg.textContent = e.message || 'Widget failed to initialize';
