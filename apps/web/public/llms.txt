@@ -1,0 +1,35 @@
+# Cerno
+
+> Cerno is an open-source human-verification SDK for sensitive actions. The visible task is a maze. The decision comes from a server-side pipeline: proof-of-work, path validation, behavioral scoring, optional Stroop probes, optional WebAuthn, and replay-resistant verification tokens. No ML inference, no third-party calls.
+
+- Packages: `@cernosh/core`, `@cernosh/react`, `@cernosh/server`
+- Site: https://cerno.sh
+- GitHub: https://github.com/PlawIO/cerno
+- npm: https://www.npmjs.com/org/cernosh
+
+## Overview
+
+- [Introduction](https://cerno.sh/docs/getting-started/): What Cerno ships, what it verifies, and how the stack fits together
+- [Quick Start](https://cerno.sh/docs/quick-start/): Minimum working integration with React and server packages
+
+## Guides
+
+- [React Component](https://cerno.sh/docs/guides/react/): Widget surface, lifecycle, props, and extension points
+- [Server SDK](https://cerno.sh/docs/guides/server/): Challenge issuance, verification pipeline, probe timing, WebAuthn, and storage contracts
+- [Cloudflare Workers](https://cerno.sh/docs/guides/cloudflare-workers/): Deploy the verification API to CF Workers with Durable Objects
+- [Stroop Probes](https://cerno.sh/docs/guides/stroop-probes/): Server-timed cognitive probes that arm mid-solve and complete with signed tokens
+- [WebAuthn Attestation](https://cerno.sh/docs/guides/webauthn/): Full registration and assertion verification with stable identity binding
+- [Adaptive Proof-of-Work](https://cerno.sh/docs/guides/adaptive-pow/): How PoW difficulty adjusts based on client signals and trust scores
+- [Reputation System](https://cerno.sh/docs/guides/reputation/): Cross-session behavioral trust that accumulates over time
+
+## Concepts
+
+- [Behavioral Scoring](https://cerno.sh/docs/concepts/behavioral-scoring/): How Cerno scores human vs. AI behavior using maze-relative baselines
+- [Secret Features](https://cerno.sh/docs/concepts/secret-features/): Server-only behavioral metrics for defense-in-depth
+- [Threat Model](https://cerno.sh/docs/concepts/threat-model/): Who Cerno is designed to stop and what the attacker looks like
+
+## Reference
+
+- [Challenge API](https://cerno.sh/docs/reference/api/): Request and response payloads for challenge, probe, verification, and WebAuthn flows
+- [siteverify](https://cerno.sh/docs/reference/siteverify/): Server-to-server token verification endpoint
+- [Error Codes](https://cerno.sh/docs/reference/errors/): All error codes returned by the verification API

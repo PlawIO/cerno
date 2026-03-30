@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
+Sitemap: https://cerno.sh/sitemap.xml
 Sitemap: https://cerno.sh/docs/sitemap-index.xml

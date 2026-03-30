@@ -1,0 +1,1993 @@
+# Cerno
+
+> Cerno is an open-source human-verification SDK for sensitive actions. The visible task is a maze. The decision comes from a server-side pipeline: proof-of-work, path validation, behavioral scoring, optional Stroop probes, optional WebAuthn, and replay-resistant verification tokens. No ML inference, no third-party calls.
+
+- Packages: `@cernosh/core`, `@cernosh/react`, `@cernosh/server`
+- Site: https://cerno.sh
+- GitHub: https://github.com/PlawIO/cerno
+
+---
+
+## Introduction
+
+Cerno is a human-verification stack for sensitive actions. The visible task is a maze. The decision
+comes from the server-side pipeline behind it: proof-of-work, path validation, behavioral scoring,
+optional Stroop probes, optional WebAuthn, and replay-resistant verification tokens.
+
+> Latin: *cerno* — "I distinguish."
+
+## The problem
+
+AI browser agents can pass image CAPTCHAs, click checkboxes, and replay deterministic flows.
+What still breaks under pressure is embodied, time-bound human behavior: how a pointer starts,
+corrects, hesitates, and reacts inside a constrained task.
+
+## How it works
+
+One visible interaction. Multiple server-verified signals.
+
+| Layer | What it does | Why it matters |
+|-------|-------------|----------------|
+| **Proof of Work** | Mines SHA-256 leading-zero bits in the background | Raises the cost of automation and challenge farming |
+| **Maze validation** | Regenerates the maze server-side from the issued seed | Prevents client-side lies about the solved path |
+| **Behavioral scoring** | Re-extracts movement features from raw events | Detects traces that look synthetic even if the maze is solved |
+| **Secret features** | Computes additional server-only motion metrics | Provides defense-in-depth beyond the public feature set |
+| **Stroop probes** | Injects a surprise color-tap task | Tests present attention, not just cursor playback |
+| **WebAuthn** | Optionally verifies platform-authenticator evidence | Adds a hardware-backed signal for higher-risk flows |
+
+## Packages
+
+| Package | What you get |
+|---------|--------------|
+| [`@cernosh/core`](https://www.npmjs.com/package/@cernosh/core) | Shared types, maze generation/validation utilities, render config, feature extraction |
+| [`@cernosh/react`](https://www.npmjs.com/package/@cernosh/react) | Drop-in widget, PoW worker fallback, ephemeral key binding, Stroop overlay |
+| [`@cernosh/server`](https://www.npmjs.com/package/@cernosh/server) | Challenge issuance, validation pipeline, token verification, siteverify, reputation helpers |
+
+## Two deployment shapes
+
+- **In-process:** Use `@cernosh/server` inside your own API routes. This is the simplest path if
+  your app already has an application server.
+- **Edge API:** Deploy `apps/worker` to Cloudflare Workers and point the React component at that
+  base URL. This gives you a standalone verification service with Durable Objects for authoritative
+  state and a KV fallback for demos.
+
+## What is public vs. private
+
+The client can see the maze, raw events, and public feature extraction code. It cannot
+authoritatively decide whether a solve is valid. Final judgment always happens server-side from
+the issued challenge, server-controlled cell size, server-side event renormalization, and
+server-only scoring layers.
+
+## Read next
+
+- Start with [Quick Start](/docs/quick-start/) if you want the shortest path to a working integration.
+- Read [Challenge API](/docs/reference/api/) for the exact request and response shapes.
+- Read [Cloudflare Workers](/docs/guides/cloudflare-workers/) if you want a deployable edge service from this repo.
+
+---
+
+## Quick Start
+
+Wire the widget, expose two endpoints, and verify the returned token before a sensitive action.
+The React package handles challenge fetch, proof-of-work, key generation, signing, maze
+interaction, and submission.
+
+## Install
+
+```bash
+npm install @cernosh/react @cernosh/server
+```
+
+## 1. Mount the widget
+
+Drop the widget into the protected view or form:
+
+```tsx
+
+
+function ProtectedPage() {
+  return (
+    <Cerno
+      siteKey="your-site-key"
+      sessionId={session.id}
+      apiUrl="/api/captcha"
+      onVerify={(token) => submitWithToken(token)}
+    />
+  )
+}
+```
+
+The component will call:
+
+- `POST /api/captcha/challenge`
+- `POST /api/captcha/verify`
+
+If you deploy the standalone worker instead, set `apiUrl` to the worker base URL, for example:
+`https://cerno-api.example.workers.dev`.
+
+## 2. Expose challenge and verify routes
+
+These two routes match the payload shape used by the current widget:
+
+```typescript
+
+
+
+const config = {
+  secret: process.env.CERNO_SECRET!,
+  store: new MemoryStore(), // development/test only
+  enableSecretFeatures: true,
+}
+
+app.post('/api/captcha/challenge', async (req, res) => {
+  const challenge = await createChallenge(config, {
+    site_key: req.body.site_key,
+    stable_id: req.body.stable_id,
+    client_capabilities: req.body.client_capabilities,
+  })
+  res.json(challenge)
+})
+
+app.post('/api/captcha/verify', async (req, res) => {
+  const result = await validateSubmission(config, req.body)
+  if (result.success) {
+    // Keep score server-side. The public success response only needs the token.
+    const { score: _, ...response } = result
+    return res.json(response)
+  }
+
+  return res.status(400).json(result)
+})
+```
+
+## 3. Gate your sensitive route with `verifyToken`
+
+```typescript
+app.post('/api/sensitive-action', async (req, res) => {
+  const verified = await verifyToken(req.body.cerno_token, {
+    secret: process.env.CERNO_SECRET!,
+    sessionId: req.session.id,
+    store: config.store,
+  })
+
+  if (!verified.valid) {
+    return res.status(403).json({ error: 'Human verification required' })
+  }
+
+  // perform the action
+})
+```
+
+## Request shape, at a glance
+
+The widget submits a payload like this to `/verify`:
+
+```json
+{
+  "challenge_id": "uuid",
+  "site_key": "your-site-key",
+  "session_id": "session-123",
+  "maze_seed": 12345,
+  "events": [{ "t": 0, "x": 0.12, "y": 0.14, "type": "down" }],
+  "pow_proof": { "nonce": 48291, "hash": "00ab..." },
+  "public_key": "base64-jwk",
+  "signature": "base64-signature",
+  "timestamp": 1711728001234
+}
+```
+
+Optional fields include `probe_completion_tokens`, `input_type`, `stable_id`, `cell_size`,
+`rate_limit_binding`, and `webauthn`. Full details are in [Challenge API](/docs/reference/api/).
+
+## Edge deployment
+
+For demos or staging, use the pre-built Cloudflare Worker:
+
+```bash
+cd apps/worker
+wrangler secret put CERNO_SECRET
+wrangler deploy
+```
+
+See [Cloudflare Workers](/docs/guides/cloudflare-workers/) for the current worker contract and environment flags.
+
+`MemoryStore` is not production-safe. Use Durable Objects in the Cloudflare worker or
+`@cernosh/server-redis` for portable production storage.
+
+---
+
+## React Component
+
+The `@cernosh/react` package exports a default widget for the full browser-side flow:
+
+- challenge fetch
+- deterministic maze rendering
+- pointer and keyboard event capture
+- proof-of-work mining
+- ephemeral P-256 key generation
+- challenge signing
+- optional probe arming and Stroop overlay rendering
+- optional WebAuthn authentication when the server requires or prefers it
+- submission to your verification API
+
+## Installation
+
+```bash
+npm install @cernosh/react
+```
+
+Peer dependencies: `react >= 18`, `react-dom >= 18`.
+
+## Basic usage
+
+```tsx
+
+
+function ProtectedForm() {
+  const handleVerify = (token: string) => {
+    fetch('/api/submit', {
+      method: 'POST',
+      body: JSON.stringify({ cerno_token: token }),
+    })
+  }
+
+  return (
+    <Cerno
+      siteKey="your-site-key"
+      sessionId={session.id}
+      stableId={user.id}
+      apiUrl="/api/captcha"
+      onVerify={handleVerify}
+    />
+  )
+}
+```
+
+## Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `siteKey` | `string` | Yes | Site identifier sent with challenge creation and verification |
+| `sessionId` | `string` | Yes | Session identifier bound into the issued verification token |
+| `stableId` | `string` | No | App-level stable identifier used for WebAuthn and reputation |
+| `onVerify` | `(token: string) => void` | Yes | Fires after successful verification |
+| `onError` | `(error: Error) => void` | No | Receives network or verification flow errors |
+| `onExpire` | `() => void` | No | Fires when the current challenge expires and is replaced |
+| `theme` | <code>'light' &#124; 'dark'</code> | No | Visual theme for the widget |
+| `size` | <code>'normal' &#124; 'compact'</code> | No | Controls the rendered cell size and layout density |
+| `apiUrl` | `string` | No | Base URL prefix used for the worker-style routes |
+
+## Lifecycle
+
+1. The component requests a challenge from `{apiUrl}/challenge`.
+2. It regenerates the maze locally from the issued seed.
+3. It starts proof-of-work mining immediately, using a Worker when available and a main-thread fallback otherwise.
+4. It generates an ephemeral P-256 keypair and signs `challenge_id:site_key:expires_at` before submit.
+5. It captures raw interaction events and sends them as `events`.
+6. If the issued challenge requires probes, it calls `{apiUrl}/probe/arm`, renders `StroopOverlay`, then exchanges the result for a `completion_token` via `{apiUrl}/probe/complete`.
+7. If the issued challenge includes `webauthn_request_options`, it calls `navigator.credentials.get()` automatically and includes the assertion in the final payload.
+8. It submits the full payload to `{apiUrl}/verify`.
+9. On success, it calls `onVerify(token)`.
+
+## Exports besides `Cerno`
+
+```tsx
+
+  MazeCanvas,
+  StroopOverlay,
+  isWebAuthnAvailable,
+  requestWebAuthnAuthentication,
+  requestWebAuthnRegistration,
+} from '@cernosh/react'
+```
+
+Use these when you want a custom integration instead of the stock widget.
+
+## Accessibility and behavior details
+
+- Keyboard events are supported by the internal collectors.
+- The widget auto-refreshes expired challenges.
+- Reduced-motion is negotiated during challenge issuance. The client does not silently skip a required probe.
+- Friendly error messages are mapped from server error codes before being shown in the component UI.
+- The stock widget automatically performs WebAuthn authentication when the challenge includes
+  `webauthn_request_options`.
+
+## What the stock widget still leaves to you
+
+Credential registration is still an app flow, not a widget flow. You must call
+`/webauthn/register/options` and `/webauthn/register/verify` yourself before the widget can use a
+credential during challenge verification.
+
+---
+
+## Server SDK
+
+The `@cernosh/server` package is the authoritative side of the system. It issues challenges,
+consumes them exactly once, verifies proof-of-work and signatures, validates maze solves from raw
+events, verifies server-timed probes and WebAuthn assertions, and mints short-lived tokens.
+
+## Installation
+
+```bash
+npm install @cernosh/server
+```
+
+For a portable production adapter:
+
+```bash
+npm install @cernosh/server @cernosh/server-redis
+```
+
+## Configuration
+
+```typescript
+
+
+
+const config: ServerConfig = {
+  secret: process.env.CERNO_SECRET!,
+  store: new MemoryStore(),
+  enableSecretFeatures: true,
+  enableProbes: false,
+  webAuthn: {
+    mode: 'off',
+    rpId: 'example.com',
+    expectedOrigin: 'https://example.com',
+  },
+  mode: 'development',
+  scoreThreshold: 0.6,
+}
+```
+
+
+`MemoryStore` is for development and tests. Production deployments should use a real shared store
+that implements `CaptchaStore` with atomic challenge consume, atomic token consume, and strong
+consistency. Use Durable Objects in `apps/worker` or `@cernosh/server-redis` in Node/Bun.
+`production` mode rejects weak stores and partial WebAuthn/probe storage at startup.
+
+
+## API
+
+### `createChallenge(config, request)`
+
+Generates a challenge and persists it with a TTL. The returned object can include:
+
+- `challenge_type`
+- maze geometry and seed
+- proof-of-work challenge and difficulty
+- server-controlled `cell_size`
+- optional `probes`
+- `requirements`
+- `webauthn_request_options`
+
+```typescript
+const challenge = await createChallenge(config, {
+  site_key: 'your-site-key',
+  stable_id: 'user-123',
+  client_capabilities: {
+    reduced_motion: false,
+    webauthn_available: true,
+  },
+})
+```
+
+You can also pass server-derived request context for adaptive proof-of-work and rate-limit binding:
+
+```typescript
+const challenge = await createChallenge(config, {
+  site_key: 'your-site-key',
+  stable_id: 'user-123',
+  client_capabilities: {
+    reduced_motion: false,
+    webauthn_available: true,
+  },
+  client_signals: {
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    failedAttempts: 2,
+    trustScore: 0.82,
+  },
+  rate_limit_binding: 'server-derived-binding',
+})
+```
+
+### `validateSubmission(config, request)`
+
+Runs the full server pipeline:
+
+1. Input bounds check
+2. Rate limit
+3. Challenge consume
+4. Site key check
+5. Public-key binding check
+6. Expiry check
+7. PoW verification
+8. ECDSA signature verification
+9. Optional WebAuthn verification
+10. Event renormalization and maze validation
+11. Server-timed probe completion token validation
+12. Behavioral scoring
+
+```typescript
+const result = await validateSubmission(config, {
+  challenge_id: '...',
+  site_key: 'your-site-key',
+  session_id: 'user-session-id',
+  maze_seed: 12345,
+  events: [{ x: 0.1, y: 0.2, t: 1234567890, type: 'down' }],
+  pow_proof: { nonce: 12345, hash: '00ab...' },
+  public_key: 'base64-jwk',
+  signature: 'base64-signature',
+  timestamp: Date.now(),
+  stable_id: 'user-123',
+  probe_completion_tokens: ['eyJhbGciOiJIUzI1NiJ9...'],
+  webauthn: assertion,
+})
+```
+
+On success the function returns:
+
+```typescript
+{ success: true, token: 'eyJ...', score: 0 }
+```
+
+The behavioral score is intentionally not exposed in the public success path. Use `onValidation`
+for observability if you need internals.
+
+### `verifyToken(token, options)`
+
+Verifies a JWT token in your own routes. Checks signature, expiry, session binding, and single-use
+enforcement.
+
+```typescript
+const result = await verifyToken(token, {
+  secret: process.env.CERNO_SECRET!,
+  sessionId: req.session.id,
+  store: config.store,
+})
+```
+
+### `siteverify(request, options)`
+
+Provides a server-to-server verification shape similar to reCAPTCHA:
+
+```typescript
+
+
+const result = await siteverify({
+  token,
+  session_id: req.session.id,
+}, {
+  secret: process.env.CERNO_SECRET!,
+  store: config.store,
+})
+```
+
+### Probe helpers
+
+Use these when you expose the full worker contract yourself:
+
+```typescript
+
+  armProbe,
+  completeProbe,
+  verifyProbeCompletionTokens,
+} from '@cernosh/server'
+```
+
+Probe timing is server-authored:
+
+- `armProbe()` validates the trace prefix and returns a signed `probe_ticket`
+- `completeProbe()` consumes the ticket and returns a signed `completion_token`
+- `validateSubmission()` accepts `probe_completion_tokens`, not raw reaction times
+
+### WebAuthn helpers
+
+```typescript
+
+  beginWebAuthnRegistration,
+  completeWebAuthnRegistration,
+  verifyWebAuthnAuthentication,
+} from '@cernosh/server'
+```
+
+Registration is explicit:
+
+- `beginWebAuthnRegistration()` issues browser-safe creation options
+- `completeWebAuthnRegistration()` verifies attestation and stores the credential
+- `createChallenge()` includes `webauthn_request_options` when a registered `stable_id` is present
+- `validateSubmission()` verifies the assertion when the challenge requires or prefers it
+
+## `CaptchaStore`
+
+Implement the `CaptchaStore` interface for any storage backend:
+
+```typescript
+interface CaptchaStore {
+  capabilities: {
+    atomicChallengeConsume: boolean
+    atomicTokenConsume: boolean
+    strongConsistency: boolean
+    productionReady: boolean
+  }
+  setChallenge(id: string, data: Challenge, ttlMs: number): Promise<void>
+  getChallenge(id: string): Promise<Challenge | null>
+  deleteChallenge(id: string): Promise<void>
+  consumeChallenge(id: string): Promise<Challenge | null>
+  consumeToken(tokenId: string, ttlMs: number): Promise<boolean>
+  incrementRate(key: string, windowMs: number): Promise<number>
+  setProbeArmSession?(id: string, data: ProbeArmSessionData, ttlMs: number): Promise<void>
+  consumeProbeArmSession?(id: string): Promise<ProbeArmSessionData | null>
+  setWebAuthnRegistrationSession?(id: string, data: WebAuthnRegistrationSessionData, ttlMs: number): Promise<void>
+  consumeWebAuthnRegistrationSession?(id: string): Promise<WebAuthnRegistrationSessionData | null>
+  listWebAuthnCredentials?(stableId: string, siteKey: string): Promise<WebAuthnCredentialRecord[]>
+  saveWebAuthnCredential?(credential: WebAuthnCredentialRecord): Promise<void>
+  updateWebAuthnCredentialCounter?(
+    stableId: string,
+    siteKey: string,
+    credentialId: string,
+    nextCounter: number,
+  ): Promise<void>
+  setReputation?(key: string, data: ReputationData, ttlMs: number): Promise<void>
+  getReputation?(key: string): Promise<ReputationData | null>
+}
+```
+
+---
+
+## Cloudflare Workers
+
+The `apps/worker` app is an edge-hosted verification API. In production it should run with the
+`CERNO_STATE` Durable Objects binding. Workers KV remains as a weak fallback for demos and local
+integration.
+
+## What ships in the worker
+
+| Route | Purpose |
+|-------|---------|
+| `POST /challenge` | Create a challenge for a site key |
+| `POST /probe/arm` | Arm a probe when the client reaches a trigger cell |
+| `POST /probe/complete` | Complete an armed probe and mint a completion token |
+| `POST /verify` | Validate the full widget submission |
+| `POST /webauthn/register/options` | Start WebAuthn credential registration |
+| `POST /webauthn/register/verify` | Verify registration and persist the credential |
+| `POST /siteverify` | Server-to-server token verification |
+
+## Configure Durable Objects, KV, and the worker
+
+```toml
+name = "cerno-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "CERNO_KV"
+id = "your-kv-namespace-id"
+
+[[durable_objects.bindings]]
+name = "CERNO_STATE"
+class_name = "CernoStateShard"
+```
+
+The repo already includes [`wrangler.toml`](https://github.com/PlawIO/cerno/blob/main/apps/worker/wrangler.toml).
+Replace the namespace IDs and keep the `CERNO_STATE` binding in place for production.
+
+## Required secret
+
+```bash
+cd apps/worker
+wrangler secret put CERNO_SECRET
+```
+
+Generate a strong value with `openssl rand -hex 32`.
+
+## Optional environment flags
+
+| Variable | Effect |
+|----------|--------|
+| <code>CERNO_MODE=development&#124;test&#124;production</code> | Controls strict config validation. `production` requires Durable Objects or another strong store. |
+| `CERNO_ENABLE_PROBES=true` | Enables Stroop probe injection |
+| `CERNO_ADAPTIVE_POW=true` | Enables adaptive proof-of-work difficulty |
+| <code>CERNO_WEBAUTHN_MODE=off&#124;preferred&#124;required</code> | Enables WebAuthn verification in issued challenges |
+| `CERNO_WEBAUTHN_RP_ID=example.com` | RP ID for WebAuthn verification |
+| `CERNO_WEBAUTHN_ORIGIN=https://example.com` | Expected origin for WebAuthn verification |
+| `CERNO_SITEVERIFY_AUTH_TOKEN=...` | Requires `Authorization: Bearer ...` on `/siteverify` |
+
+## Deploy
+
+```bash
+wrangler deploy
+```
+
+Your API is now live at `https://cerno-api.<your-subdomain>.workers.dev`.
+
+Point the React widget at that base URL:
+
+```tsx
+<Cerno
+  siteKey="your-site-key"
+  sessionId={session.id}
+  apiUrl="https://cerno-api.<your-subdomain>.workers.dev"
+  onVerify={handleVerify}
+/>
+```
+
+## Endpoint contract
+
+### `POST /challenge`
+
+Request:
+
+```json
+{
+  "site_key": "your-site-key",
+  "stable_id": "user-123",
+  "client_capabilities": {
+    "reduced_motion": false,
+    "webauthn_available": true,
+    "pointer_types": ["mouse"]
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": "challenge-uuid",
+  "challenge_type": "maze",
+  "maze_seed": 12345,
+  "maze_width": 8,
+  "maze_height": 8,
+  "maze_difficulty": 0.6,
+  "pow_challenge": "hex-string",
+  "pow_difficulty": 18,
+  "site_key": "your-site-key",
+  "created_at": 1711728000000,
+  "expires_at": 1234567890,
+  "requirements": {
+    "probe": { "mode": "off", "required_completion_count": 0 },
+    "webauthn": { "mode": "preferred" }
+  },
+  "webauthn_request_options": {
+    "challenge": "base64url",
+    "rpId": "example.com",
+    "userVerification": "required"
+  }
+}
+```
+
+### `POST /probe/arm`
+
+Request:
+
+```json
+{
+  "challenge_id": "challenge-uuid",
+  "site_key": "your-site-key",
+  "session_id": "session-123",
+  "probe_id": "probe-1",
+  "events": [{ "t": 0, "x": 0.1, "y": 0.1, "type": "down" }]
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "armed_at": 1711728001234,
+  "deadline_at": 1711728006234
+}
+```
+
+### `POST /probe/complete`
+
+Request:
+
+```json
+{
+  "challenge_id": "challenge-uuid",
+  "session_id": "session-123",
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "tapped_cell": { "x": 4, "y": 2 }
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "completion_token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+### `POST /verify`
+
+Accepts the full widget submission: raw events, PoW proof, public key, signature, optional
+`stable_id`, optional WebAuthn assertion, and `probe_completion_tokens` when probes were required.
+
+Response (success):
+
+```json
+{ "success": true, "token": "eyJ..." }
+```
+
+Response (failure):
+
+```json
+{ "success": false, "error_code": "behavioral_rejected", "score": 0 }
+```
+
+### `POST /siteverify`
+
+Request:
+
+```json
+{
+  "token": "eyJ...",
+  "session_id": "session-123"
+}
+```
+
+If `CERNO_SITEVERIFY_AUTH_TOKEN` is configured, callers must also send
+`Authorization: Bearer <token>`.
+
+## Custom domain
+
+Point `api.cerno.sh` (or your preferred subdomain) to the Worker via Cloudflare DNS. Add the
+custom domain in your Worker's settings.
+
+## Storage
+
+Authoritative production state lives in Durable Objects:
+
+- challenges: atomic consume
+- consumed tokens: atomic single-use enforcement
+- rate limits: consistent counters
+- probe arm sessions: short-lived authoritative timing state
+- WebAuthn credentials: credential storage and sign-counter updates
+
+Workers KV remains as a fallback adapter for demos and staging only.
+
+---
+
+## Stroop Probes
+
+Stroop probes are the second layer of Cerno's verification pipeline. Where the maze tests motor
+control and path planning, Stroop probes test **cognitive presence** with server-authored timing.
+
+## Why Stroop probes
+
+AI agents can solve mazes. They can also replay cursor traces. What they still do badly is handle
+a surprise task under time pressure while staying bound to the actual solve state.
+
+The Stroop effect: naming the ink color of a word is slower when the word names a different color.
+Cerno uses that interference by pausing the solve at a trigger cell and asking the user to tap the
+correct color under a short deadline.
+
+## How it works
+
+1. During challenge generation, `generateStroopProbe()` selects a trigger cell 40-60% through the maze solution path.
+2. It places 3-4 colored cells near that trigger point.
+3. When the user's trace reaches the trigger cell, the client calls `POST /probe/arm` with the trace prefix through that cell.
+4. The server validates the prefix, stores an arm session, and returns a signed `probe_ticket` with `armed_at` and `deadline_at`.
+5. The `StroopOverlay` renders with the server-armed probe. When the user taps a cell, the client calls `POST /probe/complete` with the `probe_ticket`.
+6. The server computes authoritative reaction timing, validates the tap, and returns a signed `completion_token`.
+7. Final `/verify` accepts `probe_completion_tokens`, not raw reaction times.
+
+## Client integration
+
+The `StroopOverlay` component from `@cernosh/react` renders automatically when the user's trace
+hits a trigger cell. You do not need to mount it yourself when using the stock `Cerno` component.
+
+### StroopOverlay props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `probe` | `StroopProbe` | The probe definition (cells, instruction, target color) |
+| `mazeWidth` | `number` | Maze grid width in cells |
+| `mazeHeight` | `number` | Maze grid height in cells |
+| `cellSize` | `number` | Pixel size of each maze cell |
+| `theme` | <code>'light' &#124; 'dark'</code> | Adapts overlay background and text colors |
+| `onComplete` | `(response: ProbeResponse) => void` | Callback with tap result before the client exchanges it for a completion token |
+
+### Client-side callback shape
+
+```typescript
+interface ProbeResponse {
+  probe_id: string
+  tapped_cell: { x: number; y: number }
+  reaction_time_ms: number
+}
+```
+
+That callback is not authoritative. The shipping flow exchanges it for a signed completion token.
+
+## Server validation
+
+Import the probe flow helpers from `@cernosh/server`:
+
+```typescript
+
+  armProbe,
+  completeProbe,
+  verifyProbeCompletionTokens,
+} from '@cernosh/server'
+```
+
+### `armProbe(config, request)`
+
+```typescript
+const result = await armProbe(config, {
+  challenge_id,
+  site_key,
+  session_id,
+  probe_id,
+  events: tracePrefix,
+})
+```
+
+This validates that the trace actually reached the trigger cell and returns:
+
+```typescript
+{
+  success: true,
+  probe_ticket: string,
+  armed_at: number,
+  deadline_at: number,
+}
+```
+
+### `completeProbe(config, request)`
+
+```typescript
+const result = await completeProbe(config, {
+  challenge_id,
+  session_id,
+  probe_ticket,
+  tapped_cell,
+})
+```
+
+This returns a signed `completion_token` when the probe response was valid and timely.
+
+### `verifyProbeCompletionTokens(config, challenge, sessionId, tokens)`
+
+```typescript
+const result = await verifyProbeCompletionTokens(
+  config,
+  challenge,
+  sessionId,
+  submission.probe_completion_tokens,
+)
+```
+
+Validation rules:
+
+- token count must match the number of required probes
+- the token must be signed by the server and bound to the challenge and session
+- completion can happen only once
+- server-recorded timing must fall within the allowed bounds
+- all probes must be answered correctly for the probe stage to pass
+
+## Reaction time expectations
+
+| Range | Interpretation |
+|-------|----------------|
+| Below 150ms | Rejected. Superhuman / automated. |
+| 150-300ms | Valid but penalized. Unusually fast for a Stroop task. |
+| 300-2000ms | Ideal range. Full timing score. |
+| 2000-5000ms | Valid but mild penalty. Suggests hesitation or distraction. |
+| Above 5000ms | Rejected. The server deadline elapsed. |
+
+## Configuration
+
+Stroop probes activate when the challenge type is `maze_stroop`. The current implementation injects
+at most one probe and falls back to a plain maze if the maze is too small.
+
+Key parameters in the generation logic:
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Trigger position | 40-60% through solution | Ensures user is engaged before probe fires |
+| Distractor count | 2-3 | Randomly chosen per probe |
+| Auto-timeout | 5000ms | Server rejects completion after deadline |
+| Min solution length | 6 cells | Below this, no probe is generated |
+
+---
+
+## WebAuthn
+
+WebAuthn in this repo is a real registration and assertion flow, not a structural stub. It is
+bound to your deployer-provided `stable_id`. The stock `Cerno` widget automatically performs
+authentication when the issued challenge includes `webauthn_request_options`. Registration remains
+an explicit app flow you run before challenge verification.
+
+## How it fits the challenge flow
+
+1. Your app registers a credential for a `stable_id` by calling:
+   - `POST /webauthn/register/options`
+   - `navigator.credentials.create()`
+   - `POST /webauthn/register/verify`
+2. Later, your client requests a challenge with that same `stable_id`.
+3. `createChallenge()` includes `webauthn_request_options` when the `stable_id` has registered credentials and the client says WebAuthn is available.
+4. The stock `Cerno` component automatically calls `navigator.credentials.get()` and includes the assertion in `request.webauthn`.
+5. `validateSubmission()` verifies RP ID, origin, challenge, signature, user verification, and sign counter before accepting the solve.
+
+## Browser support
+
+Platform authenticator support is required. This covers:
+
+- macOS / iOS: Touch ID, Face ID
+- Windows: Windows Hello
+- Android: fingerprint or face unlock
+- Linux: depends on FIDO2 hardware keys and browser support
+
+Headless browsers and most automation environments cannot satisfy this unless you use a virtual
+authenticator in tests.
+
+## Client API
+
+Both functions are exported from `@cernosh/react`.
+
+```bash
+npm install @cernosh/react
+```
+
+### `isWebAuthnAvailable()`
+
+Checks whether the current environment supports a user-verifying platform authenticator.
+
+```typescript
+
+
+const available = await isWebAuthnAvailable()
+```
+
+### `requestWebAuthnRegistration(options)`
+
+Starts credential creation from the server-issued registration options.
+
+```typescript
+
+
+const credential = await requestWebAuthnRegistration(registrationOptions)
+if (credential) {
+  await fetch('/webauthn/register/verify', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id,
+      response: credential,
+    }),
+  })
+}
+```
+
+### `requestWebAuthnAuthentication(options)`
+
+Requests an assertion from the platform authenticator. Returns the browser JSON payload or `null`
+if unavailable or declined.
+
+```typescript
+
+
+const assertion = await requestWebAuthnAuthentication(challenge.webauthn_request_options!)
+
+if (assertion) {
+  request.webauthn = assertion
+}
+```
+
+The returned object is `AuthenticationResponseJSON`-compatible and includes:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Identifier for the credential used |
+| `response.authenticatorData` | Authenticator state including RP ID hash, flags, and sign counter |
+| `response.clientDataJSON` | Client context including challenge and origin |
+| `response.signature` | Cryptographic signature over the assertion |
+| `response.userHandle` | Optional user handle returned by the authenticator |
+
+The stock widget uses this automatically when the challenge includes
+`webauthn_request_options`.
+
+### `requestWebAuthnAttestation(challengeId, rpId)`
+
+This legacy helper still exists as a compatibility wrapper around
+`requestWebAuthnAuthentication()`. New code should use the explicit registration and authentication
+helpers above.
+
+## Server API
+
+Registration and assertion verification are exported from `@cernosh/server` and are also invoked
+inside the worker routes and `validateSubmission()`.
+
+```bash
+npm install @cernosh/server
+```
+
+### `beginWebAuthnRegistration(config, request)`
+
+Creates browser-safe registration options and stores a short-lived registration session.
+
+```typescript
+
+
+const result = await beginWebAuthnRegistration(config, {
+  site_key: 'your-site-key',
+  stable_id: 'user-123',
+})
+```
+
+### `completeWebAuthnRegistration(config, request)`
+
+Consumes the registration session, verifies the browser response, and stores the credential.
+
+```typescript
+
+
+const result = await completeWebAuthnRegistration(config, {
+  session_id,
+  response: registrationResponse,
+})
+```
+
+### `verifyWebAuthnAuthentication(config, siteKey, stableId, expectedChallenge, response)`
+
+Verifies a real authentication assertion against the stored credential.
+
+```typescript
+
+
+const result = await verifyWebAuthnAuthentication(
+  config,
+  'your-site-key',
+  'user-123',
+  challenge.webauthn_request_options!.challenge,
+  submission.webauthn!,
+)
+```
+
+The verification checks:
+
+1. RP ID
+2. Origin
+3. Challenge binding
+4. Signature against the stored credential public key
+5. User verification
+6. Credential ownership for the `stable_id`
+7. Sign-counter monotonicity
+
+## Server config
+
+```typescript
+const config = {
+  secret: process.env.CERNO_SECRET!,
+  store,
+  webAuthn: {
+    mode: 'required',
+    rpId: 'example.com',
+    expectedOrigin: 'https://example.com',
+  },
+}
+```
+
+## Practical caveats
+
+- `stable_id` is required for WebAuthn. The core packages do not invent one for you.
+- The stock widget performs authentication, not registration.
+- `production` mode rejects WebAuthn if the configured store cannot persist registration sessions,
+  credentials, and sign-counter updates.
+
+```typescript
+
+
+const result = await validateSubmission(config, submission)
+if (!result.success) return { error: result.error_code }
+```
+
+---
+
+## Adaptive Proof-of-Work
+
+Cerno's proof-of-work difficulty is not static. The `computeAdaptiveDifficulty` helper adjusts the
+required SHA-256 leading-zero bits from a base difficulty using request context and prior trust.
+
+## How it works
+
+Each +1 bit of difficulty doubles the expected number of SHA-256 iterations. The default range is **14 to 24 bits**:
+
+| Bits | Iterations | Approximate time |
+|------|-----------|------------------|
+| 14   | ~16K      | ~50ms            |
+| 24   | ~16M      | 30-60s on mobile |
+
+The function starts from a `baseDifficulty` and applies adjustments from `ClientSignals`:
+
+```typescript
+
+
+const difficulty = computeAdaptiveDifficulty(baseDifficulty, signals, {
+  minDifficulty: 14, // floor (default)
+  maxDifficulty: 24, // ceiling (default)
+})
+```
+
+## Adjustment rules
+
+### Failed attempts: +1 bit per failure (max +4)
+
+Each failed verification attempt from the same session adds 1 bit of difficulty, capped at +4. This makes brute-force farming progressively more expensive.
+
+```typescript
+// 2 prior failures: difficulty increases by 2 bits
+{ failedAttempts: 2 } // base 16 -> 18
+```
+
+### Trust score: up to -2 bits for trusted clients
+
+Clients with a `trustScore` above 0.7 receive a difficulty discount of up to 2 bits. The discount scales linearly from 0.7 to 1.0.
+
+```typescript
+// Highly trusted client: difficulty decreases by up to 2 bits
+{ trustScore: 0.95 } // base 18 -> 16
+```
+
+A `trustScore` of 0.7 or below provides no discount.
+
+### Missing user agent: +1 bit
+
+Requests without a `User-Agent` header are treated as mildly suspicious. This catches headless clients that do not set standard headers.
+
+```typescript
+// No user agent: +1 bit
+{ userAgent: undefined } // base 16 -> 17
+```
+
+## Client signals interface
+
+The `ClientSignals` type defines all inputs to the adaptive algorithm:
+
+```typescript
+interface ClientSignals {
+  ip?: string
+  userAgent?: string
+  failedAttempts?: number   // recent failures from this session/IP
+  trustScore?: number       // reputation score 0-1 from prior sessions
+}
+```
+
+## Using it in challenge creation
+
+Pass `client_signals` inside the `createChallenge()` request object:
+
+```typescript
+
+
+const challenge = await createChallenge(config, {
+  site_key: siteKey,
+  client_signals: {
+    userAgent: request.headers.get('user-agent') ?? undefined,
+    ip: request.headers.get('cf-connecting-ip') ?? undefined,
+    failedAttempts: await getFailedAttempts(request),
+    trustScore: await lookupReputation(request),
+  },
+})
+```
+
+The worker in this repo already derives basic request signals. Set `CERNO_ADAPTIVE_POW=true` to
+enable adaptive difficulty.
+
+The final difficulty is always clamped to `[minDifficulty, maxDifficulty]`.
+
+---
+
+## Reputation System
+
+Cerno's reputation system (Phase 3) builds a behavioral fingerprint across sessions. The same human solving multiple challenges accumulates trust. Behavioral consistency across sessions is extremely hard to fake at scale.
+
+This is Cerno's software equivalent of an iris hash: not "do you have a body" but "do you behave consistently like the same human over time."
+
+## How it works
+
+1. A user completes a challenge and passes validation.
+2. Your application supplies a stable first-party identity as `stable_id`.
+3. The server derives a reputation key from that stable identifier.
+4. Six behavioral features are recorded as a running mean (EMA).
+5. On subsequent sessions, the system compares current behavior against the stored fingerprint.
+6. Consistent behavior earns a trust bonus added to the session score.
+
+## Tracked features
+
+The reputation system tracks six motor-control features across sessions:
+
+| Feature | Signal |
+|---------|--------|
+| `velocity_std` | Speed variance across the trace |
+| `path_efficiency` | Euclidean vs. actual distance |
+| `pause_count` | Hesitations during solving |
+| `jerk_std` | Third derivative of position (muscle jerk) |
+| `angular_velocity_entropy` | Randomness in direction changes |
+| `timing_cv` | Coefficient of variation in timing |
+
+Feature means are blended using an exponential moving average (EMA), creating a behavioral fingerprint that evolves with each session.
+
+## Trust scoring
+
+When a returning user completes a challenge, the final trust score blends the current session score, historical trust, and behavioral consistency. The result is clamped to `[0, 1]`.
+
+Consistent behavior across sessions earns a trust bonus. Large deviations from the stored fingerprint reduce it.
+
+## Decay mechanics
+
+Trust decays when a user is absent. After a period of inactivity, stored trust erodes progressively. Records expire entirely after the configured TTL (default 30 days).
+
+## API reference
+
+### `reputationKey(stableId)`
+
+Derives a namespaced store key from your app-level stable identifier.
+
+```typescript
+
+
+const key = reputationKey(stableId)
+// => "rep:a1b2c3..."
+```
+
+### `queryReputation(store, key)`
+
+Returns the trust score for a key. Returns `0.5` (neutral) if unknown or if the store does not implement reputation methods. Applies time-based decay automatically.
+
+```typescript
+
+
+const trust = await queryReputation(store, key)
+// 0.5 for unknown users, 0-1 for returning users
+```
+
+### `updateReputation(store, key, score, features, ttlMs?)`
+
+Updates the stored reputation after a validated session. On first session, initializes the record. On subsequent sessions, blends the new score and features using EMA.
+
+```typescript
+
+
+await updateReputation(store, repKey, 0.87, extractedFeatures)
+// Optional: custom TTL (default 30 days)
+await updateReputation(store, repKey, 0.87, extractedFeatures, 60 * 24 * 60 * 60 * 1000)
+```
+
+### `computeConsistencyBonus(features, reputation)`
+
+Computes a bonus score (max **+0.1**) based on how closely current features match the stored fingerprint. Requires at least 2 prior sessions. Confidence scales linearly up to 10 sessions.
+
+```typescript
+
+
+const bonus = computeConsistencyBonus(currentFeatures, reputationData)
+// 0 for new users, up to 0.1 for consistent returning users
+```
+
+The bonus is added to the raw behavioral score during validation, before the threshold check.
+
+## KV store integration
+
+Reputation is opt-in. The `CaptchaStore` interface has two optional methods:
+
+```typescript
+interface CaptchaStore {
+  // ... core methods ...
+
+  // Reputation (optional)
+  setReputation?(key: string, data: ReputationData, ttlMs: number): Promise<void>
+  getReputation?(key: string): Promise<ReputationData | null>
+}
+```
+
+If your store does not implement these methods, reputation is skipped. `MemoryStore` includes a
+built-in implementation for development and tests. For production, use a durable strongly
+consistent store. The Cloudflare KV adapter in this repo does not meet that bar.
+
+The `ReputationData` shape stored per key:
+
+```typescript
+interface ReputationData {
+  trust_score: number                       // 0-1 weighted average
+  session_count: number                     // completed sessions
+  feature_means: Partial<BehavioralFeatures> // EMA of tracked features
+  last_seen: number                         // timestamp (ms)
+}
+```
+
+## Pipeline integration
+
+Reputation plugs into the validation pipeline automatically. After behavioral scoring completes, the server:
+
+1. Derives `repKey` from `stable_id`.
+2. Looks up existing reputation data.
+3. Calls `computeConsistencyBonus()` to get a bonus (up to +0.1).
+4. Adds the bonus to the raw score before the threshold check.
+5. After a successful validation, calls `updateReputation()` to persist the updated fingerprint.
+
+Reputation is opt-in. Enable it only when you have both a real stable identity source and durable
+store support.
+
+---
+
+## Behavioral Scoring
+
+Cerno's behavioral scoring uses deterministic math — no ML on the hot path. Pure statistical thresholds against known human distributions.
+
+## Public features
+
+The client SDK extracts 7 behavioral features from raw pointer events:
+
+| Feature | What it measures |
+|---------|-----------------|
+| `velocity_std` | Speed variance across the trace |
+| `path_efficiency` | Euclidean vs. actual path distance |
+| `pause_count` | Hesitations over 100ms |
+| `movement_onset_ms` | Reaction time before first move |
+| `jerk_std` | Third derivative of position |
+| `angular_velocity_entropy` | Randomness in direction changes |
+| `timing_cv` | Coefficient of variation of inter-event timing |
+
+All features are re-extracted server-side from raw events. The client cannot lie about them.
+
+## Scoring
+
+Each feature is scored against baselines. Features are combined via weighted average with penalties for suspicious patterns. The server also computes additional secret features not present in client code — see [Secret Features](/docs/concepts/secret-features).
+
+## Maze-relative baselines
+
+Published mouse-movement baselines assume free-form movement. A maze constrains the path. A human solving an easy 4x4 maze behaves differently than one solving a complex 12x12.
+
+Cerno computes a **MazeProfile** for each generated maze and derives expected feature ranges from the maze structure. This prevents false rejections on easy mazes and missed bots on hard ones.
+
+## Penalties
+
+- **Low sample count** — not enough pointer data is suspicious
+- **Fast completion** — humans don't solve mazes instantly
+
+## Threshold
+
+Default: **0.6** (configurable via `ScoringConfig`). Adjust based on your use case.
+
+## Runtime configuration
+
+Use `ScoringConfig` to override baselines and scoring parameters at runtime:
+
+```typescript
+const config: ServerConfig = {
+  secret: process.env.CERNO_SECRET!,
+  store: new MemoryStore(),
+  scoring: {
+    gaussianK: 3,
+    publicScoreWeight: 0.7,
+    secretScoreWeight: 0.3,
+  },
+}
+```
+
+See the [Server SDK guide](/docs/guides/server) for full configuration options.
+
+---
+
+## Secret Features
+
+Cerno's open-source `@cernosh/core` package exposes 7 public behavioral features. The server computes additional features that never appear in any client-facing package.
+
+## Why server-only matters
+
+The client code is fully inspectable. Anyone can read the GitHub source. The defense model accepts this:
+
+1. **Script-kiddie barrier** — most bots won't analyze server scoring at all
+2. **Rotation without client changes** — server features can be swapped, reweighted, or replaced without shipping a new client version
+3. **High-dimensional space** — combining public + secret features creates a scoring space that's expensive to optimize against simultaneously
+
+Even if an attacker finds the server source, they still need to produce traces that satisfy all features at once. Each additional dimension makes brute-force tuning exponentially harder.
+
+## How it works
+
+The server extracts additional motion metrics from the raw pointer events after 60 Hz resampling. These metrics target biomechanical properties of human motor control that are difficult to synthesize.
+
+Details of the specific features, their baselines, and scoring weights are intentionally not published. The security value depends partly on attackers not knowing exactly which properties to optimize for.
+
+## Managed service advantage
+
+Self-hosters get a solid default set of secret features from the `@cernosh/server` package. The managed service at `api.cerno.sh` uses a broader feature set calibrated from production data, providing stronger detection against sophisticated attacks.
+
+## `SecretFeaturesProvider` interface
+
+If you need custom server-only scoring, implement the `SecretFeaturesProvider` interface:
+
+```typescript
+
+
+const customProvider: SecretFeaturesProvider = {
+  score(ctx: ScoringContext) {
+    // Your custom scoring logic
+    return { score: 0.8 }
+  }
+}
+```
+
+Pass it via `ServerConfig.secretFeaturesProvider`. When set, it replaces the built-in secret feature scoring entirely.
+
+---
+
+## Threat Model
+
+Cerno is designed specifically for **AI browser agents** — not mass bots. This changes the design significantly.
+
+## The attacker
+
+The threat is not a traditional botnet. It's an AI agent using a real browser:
+
+- **Playwright / Puppeteer** automation
+- **Claude Computer Use** (Anthropic)
+- **browser-use** (open-source agent framework)
+- **Operator** (OpenAI)
+- **Stagehand** and similar agent toolkits
+
+These agents can:
+- Solve visual puzzles (image recognition, OCR)
+- Recognize and click UI elements
+- Type text, check boxes, identify traffic lights
+- Read and understand page content
+- Replay recorded human sessions
+
+## What they can't do (yet)
+
+- Produce human-like jerk dynamics from motor control
+- Replicate micro-corrections and hesitations of human hand movement
+- Fake the statistical distribution of human behavioral features without access to the scoring algorithm
+- Maintain consistent behavioral profiles across multiple attempts
+
+## Design implications
+
+### The maze is a Trojan horse
+
+The visible challenge (solve the maze) is not the real test. It's a delivery mechanism for collecting behavioral data. The maze forces the user to produce a continuous stream of pointer events with direction changes, pauses at decision points, and varying speeds.
+
+### Behavioral layer is the verdict
+
+The PoW layer is economic defense against scale. The maze layer is spatial reasoning. But the behavioral layer is what actually distinguishes human from agent.
+
+### Server-side re-extraction
+
+All 6 behavioral features are re-computed server-side from the raw event stream. The client sends coordinates and timestamps; the server derives everything else. The client cannot submit pre-computed features.
+
+### No ML on the hot path
+
+The scoring uses deterministic statistical thresholds. This means:
+- **Auditable**: you can inspect exactly why a score was assigned
+- **Predictable**: same input always produces same output
+- **Fast**: sub-50ms server validation, no inference latency
+- **Transparent**: no black-box model making opaque decisions
+
+## What Cerno is NOT
+
+- **Not a bot detection service.** It doesn't fingerprint browsers, check IP reputation, or analyze request patterns.
+- **Not a rate limiter.** It has per-session rate limiting, but that's a defense mechanism, not the core product.
+- **Not ML-based.** There's no model to retrain, no data pipeline to maintain, no inference cost.
+
+---
+
+## Worker API
+
+The stock React widget calls `POST /challenge`, optional probe routes, and `POST /verify`. The
+worker also exposes WebAuthn registration routes and `POST /siteverify`.
+
+## `POST /challenge`
+
+Creates a new verification challenge.
+
+### Request
+
+```json
+{
+  "site_key": "your-site-key",
+  "stable_id": "user-123",
+  "client_capabilities": {
+    "reduced_motion": false,
+    "webauthn_available": true,
+    "pointer_types": ["mouse"]
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "challenge_type": "maze_stroop",
+  "maze_seed": 827461,
+  "maze_width": 8,
+  "maze_height": 8,
+  "maze_difficulty": 0.6,
+  "pow_challenge": "a1b2c3d4e5f6...",
+  "pow_difficulty": 18,
+  "site_key": "your-site-key",
+  "created_at": 1711727880000,
+  "expires_at": 1711728000,
+  "requirements": {
+    "probe": {
+      "mode": "required",
+      "required_completion_count": 1
+    },
+    "webauthn": {
+      "mode": "preferred"
+    }
+  },
+  "probes": [
+    {
+      "id": "probe-1",
+      "type": "color_tap",
+      "instruction": "Tap the blue cell",
+      "target_color": "blue",
+      "distractor_colors": ["red", "green"],
+      "cells": [
+        { "x": 4, "y": 2, "color": "blue", "isTarget": true }
+      ],
+      "trigger_cell": { "x": 3, "y": 2 }
+    }
+  ],
+  "webauthn_request_options": {
+    "challenge": "base64url",
+    "rpId": "example.com",
+    "timeout": 60000,
+    "userVerification": "required",
+    "allowCredentials": [
+      { "id": "credential-id", "type": "public-key", "transports": ["internal"] }
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique challenge identifier |
+| `challenge_type` | <code>'maze' &#124; 'maze_stroop'</code> | Whether probes were injected |
+| `maze_seed` | `number` | Seed for deterministic maze generation |
+| `maze_width` | `number` | Maze grid width |
+| `maze_height` | `number` | Maze grid height |
+| `maze_difficulty` | `number` | Difficulty parameter |
+| `pow_challenge` | `string` | Hex string for proof-of-work input |
+| `pow_difficulty` | `number` | Required leading zero bits |
+| `site_key` | `string` | Site key the challenge was issued for |
+| `created_at` | `number` | Creation time in milliseconds |
+| `expires_at` | `number` | Expiry time in milliseconds |
+| `cell_size` | `number` | Server-authoritative maze cell size |
+| `requirements` | `ChallengeRequirements` | Server-declared probe and WebAuthn requirements |
+| `probes` | `StroopProbe[]` | Present when the challenge type is `maze_stroop` |
+| `webauthn_request_options` | `WebAuthnRequestOptionsJSON` | Present when the supplied `stable_id` has registered credentials and the server wants a WebAuthn assertion |
+
+## `POST /probe/arm`
+
+Arms a probe after the client reaches the trigger cell.
+
+### Request
+
+```json
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "site_key": "your-site-key",
+  "session_id": "user-session-id",
+  "probe_id": "probe-1",
+  "events": [
+    { "x": 0.126, "y": 0.124, "t": 12, "type": "down" },
+    { "x": 0.125, "y": 0.189, "t": 28, "type": "move" }
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "armed_at": 1711728001234,
+  "deadline_at": 1711728006234
+}
+```
+
+## `POST /probe/complete`
+
+Completes an armed probe and returns a signed completion token.
+
+### Request
+
+```json
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "user-session-id",
+  "probe_ticket": "eyJhbGciOiJIUzI1NiJ9...",
+  "tapped_cell": { "x": 4, "y": 2 }
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "completion_token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+## `POST /verify`
+
+Validates a completed challenge submission.
+
+### Request
+
+```json
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "site_key": "your-site-key",
+  "session_id": "user-session-id",
+  "maze_seed": 827461,
+  "events": [
+    { "x": 0.126, "y": 0.124, "t": 12, "type": "down" },
+    { "x": 0.125, "y": 0.189, "t": 28, "type": "move" }
+  ],
+  "pow_proof": { "nonce": 48291, "hash": "00af2c..." },
+  "public_key": "eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2Iiwi...",
+  "signature": "MEQCIA...",
+  "timestamp": 1711728001234,
+  "stable_id": "user-123",
+  "probe_completion_tokens": ["eyJhbGciOiJIUzI1NiJ9..."],
+  "webauthn": {
+    "id": "credential-id",
+    "rawId": "credential-id",
+    "type": "public-key",
+    "response": {
+      "clientDataJSON": "base64url",
+      "authenticatorData": "base64url",
+      "signature": "base64url",
+      "userHandle": "base64url"
+    }
+  }
+}
+```
+
+### Required fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `challenge_id` | `string` | Must reference an unconsumed challenge |
+| `site_key` | `string` | Must match the issued challenge |
+| `session_id` | `string` | Bound into the token |
+| `maze_seed` | `number` | Present in the request shape; server trusts the challenge seed instead |
+| `events` | `RawEvent[]` | Raw interaction stream |
+| `pow_proof` | `{ nonce: number; hash: string }` | Submitted proof-of-work |
+| `public_key` | `string` | Base64-encoded JWK |
+| `signature` | `string` | ECDSA P-256 signature over `challenge_id:site_key:expires_at` |
+| `timestamp` | `number` | Client timestamp |
+
+### Optional fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `stable_id` | `string` | Required for WebAuthn and reputation-backed flows |
+| `cell_size` | `number` | Client-reported cell size; server uses issued `challenge.cell_size` |
+| `input_type` | <code>'mouse' &#124; 'touch' &#124; 'keyboard'</code> | Observability hint only |
+| `rate_limit_binding` | `string` | Server-derived binding; browser clients should not set this directly |
+| `probe_completion_tokens` | `string[]` | Required when the challenge includes probes |
+| `webauthn` | `AuthenticationResponseJSON` | Required when `requirements.webauthn.mode === 'required'` |
+
+### Response (success)
+
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+### Response (failure)
+
+```json
+{
+  "success": false,
+  "score": 0,
+  "error_code": "behavioral_rejected"
+}
+```
+
+The token is:
+
+- bound to the `session_id`
+- single-use
+- valid for 60 seconds
+
+## `POST /webauthn/register/options`
+
+Starts credential registration for a `stable_id`.
+
+### Request
+
+```json
+{
+  "site_key": "your-site-key",
+  "stable_id": "user-123"
+}
+```
+
+### Response
+
+```json
+{
+  "session_id": "registration-session-id",
+  "options": {
+    "challenge": "base64url",
+    "rp": { "id": "example.com", "name": "Cerno" },
+    "user": {
+      "id": "base64url",
+      "name": "user-123",
+      "displayName": "user-123"
+    }
+  }
+}
+```
+
+## `POST /webauthn/register/verify`
+
+Consumes the registration session and stores the credential.
+
+### Request
+
+```json
+{
+  "session_id": "registration-session-id",
+  "response": {
+    "id": "credential-id",
+    "rawId": "credential-id",
+    "type": "public-key",
+    "response": {
+      "clientDataJSON": "base64url",
+      "attestationObject": "base64url"
+    }
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "credential_id": "credential-id"
+}
+```
+
+## Token verification
+
+Use `verifyToken` from `@cernosh/server` to validate tokens in your own routes:
+
+```typescript
+
+
+const result = await verifyToken(token, {
+  secret: process.env.CERNO_SECRET!,
+  sessionId: req.session.id,
+  store: config.store,
+})
+
+if (!result.valid) {
+  return res.status(403).json({ error: 'Verification required' })
+}
+```
+
+---
+
+## siteverify
+
+`siteverify` gives you a server-to-server verification shape similar to reCAPTCHA. It is useful
+when the verifier runs as a separate API service instead of inside the same process as your app.
+The signing secret is server-held only. Clients never send it in the request body.
+
+## When to use siteverify vs verifyToken
+
+| | `siteverify` | `verifyToken` |
+|---|---|---|
+| **Use case** | Server-to-server verification over HTTP | Direct in-process verification |
+| **Secret management** | Server-held secret in verifier options | Single secret in config |
+| **Input validation** | Checks for missing fields before verification | Assumes valid input |
+| **Response format** | Includes decoded claims | Returns `{ valid, score: 0, error? }` |
+
+Use `siteverify` when your backend calls a Cerno API endpoint. Use `verifyToken` when Cerno runs
+in-process.
+
+## Request format
+
+```typescript
+interface SiteverifyRequest {
+  token: string
+  session_id: string
+}
+```
+
+Both required fields must be present or the call returns an error immediately.
+
+## Response format
+
+```typescript
+interface SiteverifyResult {
+  success: boolean
+  score: number
+  challenge_id?: string
+  session_id?: string
+  site_key?: string
+  error?: string
+}
+```
+
+### Success response
+
+```json
+{
+  "success": true,
+  "score": 0,
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "user-session-id",
+  "site_key": "your-site-key"
+}
+```
+
+### Failure response
+
+```json
+{
+  "success": false,
+  "score": 0,
+  "error": "token_expired"
+}
+```
+
+## Usage
+
+### As an HTTP endpoint
+
+Expose `siteverify` as a `POST /siteverify` route:
+
+```typescript
+
+
+app.post('/siteverify', async (req, res) => {
+  const result = await siteverify({
+    token: req.body.token,
+    session_id: req.body.session_id,
+  }, {
+    secret: process.env.CERNO_SECRET!,
+    store,
+  })
+
+  res.json(result)
+})
+```
+
+If you expose this route publicly, require an operator auth header. The checked-in worker supports
+`CERNO_SITEVERIFY_AUTH_TOKEN` and expects `Authorization: Bearer <token>`.
+
+### Calling from your backend
+
+```typescript
+const response = await fetch('https://your-cerno-endpoint/siteverify', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${process.env.CERNO_SITEVERIFY_AUTH_TOKEN}`,
+  },
+  body: JSON.stringify({
+    token: clientToken,
+    session_id: userSessionId,
+  }),
+})
+
+const result = await response.json()
+
+if (!result.success) {
+  // reject the request
+}
+```
+
+## Key rotation
+
+Pass an array of versioned signing keys in the verifier options to support key rotation without
+downtime. The function tries each key until one validates:
+
+```typescript
+const result = await siteverify(
+  {
+    token: clientToken,
+    session_id: userSessionId,
+  },
+  {
+    secret: currentSecret,
+    secrets: [
+      { kid: 'v2', value: currentSecret },
+      { kid: 'v1', value: previousSecret },
+    ],
+    store,
+  },
+)
+```
+
+---
+
+## Error Codes
+
+When verification fails, the API returns `{ success: false, error_code: "..." }` with an appropriate HTTP status.
+
+## Error codes
+
+| Code | HTTP | Meaning |
+|------|------|---------|
+| `challenge_not_found` | 400 | Unknown or already-consumed challenge ID |
+| `challenge_expired` | 410 | Challenge is older than 2 minutes |
+| `invalid_pow` | 400 | Proof of work didn't meet the difficulty requirement |
+| `invalid_path` | 400 | The submitted path doesn't solve the maze |
+| `behavioral_rejected` | 400 | Behavioral score below threshold |
+| `rate_limited` | 429 | Too many attempts from this session |
+| `invalid_request` | 400 | Malformed, oversized, or missing required fields |
+| `invalid_signature` | 400 | Missing or invalid ECDSA challenge signature |
+| `public_key_mismatch` | 400 | Submitted public key does not match the challenge binding |
+| `probe_failed` | 400 | Probe completion tokens were missing, invalid, replayed, expired, or incorrect |
+| `webauthn_failed` | 400 | Required WebAuthn assertion was missing or assertion verification failed |
+
+## Handling errors
+
+The React component maps these to user-facing messages and retries where appropriate. For token
+verification, check the `valid` field:
+
+```typescript
+const result = await verifyToken(token, options)
+
+if (!result.valid) {
+  // Token is invalid — require re-verification
+}
+```
+
+## Common scenarios
+
+### `challenge_expired`
+
+The user took longer than 2 minutes to complete the maze. The widget should automatically request a new challenge.
+
+### `behavioral_rejected`
+
+The behavioral score fell below the threshold (default 0.6). This can happen with:
+- Trackpad users who produce less jerk variance
+- Very fast completions on easy mazes
+- Unusual input devices
+
+Consider using calibration mode (threshold 0.3) during initial deployment to collect baseline data before tightening.
+
+### `rate_limited`
+
+A single server-derived client binding has made too many attempts. Default limit is 3 attempts per
+5-minute window.
+
+### `invalid_signature`
+
+The browser did not submit a valid signature over `challenge_id`, or the request omitted the
+ephemeral public key entirely.
+
+### `probe_failed`
+
+The probe step was required and failed. Causes include:
+
+- missing completion tokens
+- forged or replayed completion tokens
+- wrong tap target
+- completion after the server deadline
+- mismatched challenge/session binding
+
