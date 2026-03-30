@@ -39,8 +39,10 @@ export const MIN_DURATION_MS = 2000
 // ── Path efficiency baseline multipliers ──
 /** Human path efficiency as fraction of BFS optimal. */
 export const PATH_EFFICIENCY_MEAN_RATIO = 0.9
-/** Std dev of path efficiency as fraction of BFS optimal. */
-export const PATH_EFFICIENCY_STD_RATIO = 0.15
+/** Std dev of path efficiency as fraction of BFS optimal.
+ *  Widened from 0.15: production users getting lost produce efficiency 0.3-0.5x below
+ *  optimal, which is human behavior (not bot). Bots go straight and score well here. */
+export const PATH_EFFICIENCY_STD_RATIO = 0.30
 
 // ── Pause count baseline multipliers ──
 /** Human pauses per decision point in the maze. */

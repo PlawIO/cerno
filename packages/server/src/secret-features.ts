@@ -48,33 +48,37 @@ interface SecretBaseline {
  * Rotate these periodically based on production data.
  */
 /**
- * Calibrated from 200 synthetic human traces across 6x6/8x8/10x10 mazes.
- * Std widened 1.5x beyond observed synthetic variance to accommodate
- * real hardware variation. Last calibrated: 2026-03-30.
+ * Calibrated from 28 production records (Chrome/macOS/AT, 2026-03-30).
+ * Previous synthetic calibration had wrong baselines for real browsers:
+ * Chrome reports pointer events at display-refresh rate (60Hz), giving
+ * raw_timing_entropy ~1-4 (not ~5), and curvature_mean in absolute pixel
+ * units 20-140 (not 620). Std widened 1.5-2x to accommodate real variation.
+ * Last calibrated: 2026-03-30 (production).
  */
 const SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
-  velocity_autocorrelation:  { mean: 0.83,  std: 0.08,   weight: 1.2 },
-  micro_correction_rate:     { mean: 0.70,  std: 0.08,   weight: 1.5 },
-  sub_movement_count:        { mean: 65,    std: 28,     weight: 0.8 },
-  acceleration_asymmetry:    { mean: 1.01,  std: 0.13,   weight: 1.0 },
-  curvature_mean:            { mean: 620,   std: 550,    weight: 0.8 },
-  raw_timing_entropy:        { mean: 5.17,  std: 0.52,   weight: 0.5 },
+  velocity_autocorrelation:  { mean: 0.89,  std: 0.08,   weight: 1.2 },
+  micro_correction_rate:     { mean: 0.57,  std: 0.20,   weight: 1.5 },
+  sub_movement_count:        { mean: 50,    std: 40,     weight: 0.8 },
+  acceleration_asymmetry:    { mean: 1.05,  std: 0.15,   weight: 1.0 },
+  curvature_mean:            { mean: 57,    std: 50,     weight: 0.8 },
+  raw_timing_entropy:        { mean: 2.0,   std: 0.9,    weight: 0.3 },
   probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 1.0 },
   coalesced_event_ratio:     { mean: 3.0,   std: 1.5,    weight: 1.0 },
   timing_kurtosis:           { mean: 12.0,  std: 8.5,    weight: 1.0 },
 }
 
 /**
- * Touch-specific baselines. Touch has more spatial noise (finger vs cursor),
- * so wider std and shifted means. Based on mouse calibration + touch offsets.
+ * Touch-specific baselines. Touch has more spatial noise (finger vs cursor).
+ * Production touch records show similar kinematic profile to mouse with
+ * slightly lower MCR and VKA (finger is less precise). Last calibrated: 2026-03-30.
  */
 const TOUCH_SECRET_BASELINES: Record<keyof SecretFeatures, SecretBaseline> = {
-  velocity_autocorrelation:  { mean: 0.75,  std: 0.12,   weight: 1.2 },
-  micro_correction_rate:     { mean: 0.65,  std: 0.12,   weight: 1.0 },
-  sub_movement_count:        { mean: 55,    std: 30,     weight: 0.8 },
+  velocity_autocorrelation:  { mean: 0.82,  std: 0.12,   weight: 1.2 },
+  micro_correction_rate:     { mean: 0.52,  std: 0.22,   weight: 1.0 },
+  sub_movement_count:        { mean: 45,    std: 40,     weight: 0.8 },
   acceleration_asymmetry:    { mean: 1.05,  std: 0.20,   weight: 1.0 },
-  curvature_mean:            { mean: 700,   std: 600,    weight: 0.8 },
-  raw_timing_entropy:        { mean: 5.0,   std: 0.8,    weight: 0.5 },
+  curvature_mean:            { mean: 65,    std: 60,     weight: 0.8 },
+  raw_timing_entropy:        { mean: 2.0,   std: 1.0,    weight: 0.3 },
   probe_motor_continuity:    { mean: 0.5,   std: 0.2,    weight: 1.0 },
   coalesced_event_ratio:     { mean: 1.5,   std: 1.0,    weight: 0.6 },
   timing_kurtosis:           { mean: 10.0,  std: 10.0,   weight: 0.8 },
@@ -443,10 +447,11 @@ export function scoreSecretFeatures(
   // Gate 2: Directional bias detection.
   // Bots are systematically BELOW human means on kinematic features
   // (vel_ac, micro-corrections, curvature, entropy, kurtosis). Humans
-  // scatter randomly above and below. Signed z-score mean:
-  //   Human: mean=0.004, range [-0.40, +0.74]
-  //   Bot:   mean=-1.19,  range [-1.74, -0.72]
-  // Zero overlap at -0.5. This is the strongest behavioral discriminator.
+  // scatter randomly above and below. Signed z-score mean (production calibrated):
+  //   Human:     mean=0.004, range [-0.40, +0.41]
+  //   Naive bot: mean=-1.19,  range [-1.74, -0.72]  → caught by lower gate at -0.4
+  //   Tuned bot: mean=+1.21,  range [+1.15, +1.53]  → caught by upper gate at +0.8
+  // Dual gates: under-shoot = lazy/random movement, over-shoot = mechanical sharp turns.
   const DIRECTIONAL_KEYS: Array<keyof SecretFeatures> = [
     'velocity_autocorrelation', 'micro_correction_rate',
     'curvature_mean', 'raw_timing_entropy', 'timing_kurtosis',
@@ -459,6 +464,13 @@ export function scoreSecretFeatures(
     if (meanSignedZ < -0.4) {
       // Gradient: -0.4 → no penalty, -0.8 → floor at 0.20
       const multiplier = Math.max(0.20, 1.0 + (meanSignedZ + 0.4) * 2.0)
+      score *= multiplier
+    } else if (meanSignedZ > 0.8) {
+      // Over-shoot gate: mechanical sharp-turn movement (tuned bot signature).
+      // Real humans max at +0.41 (production data). Bots with maze-optimal paths
+      // hit +1.15 to +1.53 due to high CM and RTE from 90° turns and constant speed.
+      // Gradient: +0.8 → no penalty, +1.2 → floor at 0.15
+      const multiplier = Math.max(0.15, 1.0 - (meanSignedZ - 0.8) * 2.5)
       score *= multiplier
     }
   }
