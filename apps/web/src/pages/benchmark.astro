@@ -550,7 +550,11 @@
           cSt('Verifying...');
           try{
             var pow=await cPow;
-            var binding=cChallenge.id+':'+cChallenge.site_key+':'+cChallenge.expires_at;
+            var canonical=JSON.stringify(cRawEvents.map(function(e){return[e.t,e.x,e.y,e.type]}));
+            var dBuf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
+            var dArr=new Uint8Array(dBuf);var eDig='';
+            for(var di=0;di<dArr.length;di++)eDig+=dArr[di].toString(16).padStart(2,'0');
+            var binding=cChallenge.id+':'+cChallenge.site_key+':'+cChallenge.expires_at+':'+eDig;
             var sig=await cSign(binding,cKeyPair.priv);
             var res=await fetch(C_API+'/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge_id:cChallenge.id,site_key:C_KEY,session_id:C_SID,events:cRawEvents,pow_proof:pow,public_key:cKeyPair.pub,signature:sig,timestamp:Date.now()})});
             var result=await res.json();

@@ -1533,7 +1533,12 @@ const enableReactGrab = import.meta.env.DEV
         setHint('Verifying...');
         try {
           var pow = await powPromise;
-          var binding = challengeData.id + ':' + challengeData.site_key + ':' + challengeData.expires_at;
+          var canonical = JSON.stringify(rawEvents.map(function(e) { return [e.t, e.x, e.y, e.type]; }));
+          var digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+          var digestArr = new Uint8Array(digestBuf);
+          var eventsDigest = '';
+          for (var di = 0; di < digestArr.length; di++) eventsDigest += digestArr[di].toString(16).padStart(2, '0');
+          var binding = challengeData.id + ':' + challengeData.site_key + ':' + challengeData.expires_at + ':' + eventsDigest;
           var signature = await signBinding(binding, ecKeyPair.privateKey);
 
           var res = await fetch(API_URL + '/verify', {
