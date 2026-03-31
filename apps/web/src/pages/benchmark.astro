@@ -59,9 +59,9 @@ import { CernoBenchmark } from '../components/CernoBenchmark'
       .logo { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 500; font-size: 15px; letter-spacing: -0.02em; }
       .logo-mark { width: 20px; height: 20px; flex-shrink: 0; }
       .nav-r { display: flex; gap: 20px; font-size: 14px; color: var(--muted); align-items: center; }
-      .nav-r a { transition: color 0.15s; }
+      .nav-r a { transition: color 0.15s; min-height: 44px; display: inline-flex; align-items: center; }
       .nav-r a:hover { color: var(--fg); }
-      .theme-toggle { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px; display: inline-flex; align-items: center; transition: color 0.15s; }
+      .theme-toggle { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px; display: inline-flex; align-items: center; transition: color 0.15s; min-height: 44px; min-width: 44px; justify-content: center; }
       .theme-toggle:hover { color: var(--fg); }
       .icon-sun, .icon-moon, .icon-auto { width: 16px; height: 16px; }
       [data-mode='light'] .icon-moon, [data-mode='light'] .icon-auto,
@@ -144,21 +144,6 @@ import { CernoBenchmark } from '../components/CernoBenchmark'
       .num-card .num-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
       .ctx-notice { font-size: 12px; color: var(--muted); font-family: var(--mono); line-height: 1.6; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 12px 16px; margin-top: 12px; }
-
-      /* MOBILE */
-      @media (max-width: 640px) {
-        .nav-inner { padding: 0 16px; }
-        main { padding: 0 16px 80px; }
-        .panel-head { flex-wrap: wrap; gap: 4px 8px; padding: 10px 12px; }
-        .panel-title { white-space: normal; flex-wrap: wrap; }
-        .panel-meta { font-size: 10px; }
-        .panel-body { padding: 10px; }
-        .panel-body [data-cerno-theme] { width: 100%; }
-        .btn-reset { min-height: 44px; padding: 8px 14px; }
-        .page-header h1 { font-size: 22px; }
-        .page-header p { font-size: 13px; }
-        .numbers-grid { grid-template-columns: 1fr 1fr; }
-      }
     </style>
   </head>
 
