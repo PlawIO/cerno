@@ -64,6 +64,8 @@ export function MazeCanvas({
     currentCell: null,
   })
   const completedRef = useRef(false)
+  // True when the drawn path reaches the exit zone (visual feedback: "click to finish")
+  const atExitRef = useRef(false)
   const [inputMode, setInputMode] = useState<'pointer' | 'keyboard'>('pointer')
   const [canvasSize, setCanvasSize] = useState(0)
   const animFrameRef = useRef(0)
@@ -163,6 +165,14 @@ export function MazeCanvas({
       if (exitPosition) {
         const ex = exitPosition.x * mazePixelW
         const ey = exitPosition.y * mazePixelH
+        // "Click to finish" ring when path reaches exit
+        if (atExitRef.current) {
+          ctx.strokeStyle = RENDERING.EXIT_COLOR
+          ctx.lineWidth = 2.5
+          ctx.beginPath()
+          ctx.arc(ex, ey, RENDERING.MARKER_RADIUS + 6, 0, Math.PI * 2)
+          ctx.stroke()
+        }
         ctx.fillStyle = RENDERING.EXIT_COLOR
         ctx.beginPath()
         ctx.arc(ex, ey, RENDERING.MARKER_RADIUS, 0, Math.PI * 2)
@@ -188,7 +198,10 @@ export function MazeCanvas({
       ctx.fillStyle = isDark ? '#94a3b8' : '#64748b'
       ctx.font = `${size === 'compact' ? 11 : 13}px system-ui, -apple-system, sans-serif`
       ctx.textAlign = 'center'
-      ctx.fillText('Draw a path from green to red', logicalW / 2, logicalH - 8)
+      ctx.fillText(
+        atExitRef.current ? 'Click the red circle to finish' : 'Click green, draw to red',
+        logicalW / 2, logicalH - 8,
+      )
 
       return
     }
@@ -207,7 +220,9 @@ export function MazeCanvas({
     ctx.font = `${size === 'compact' ? 11 : 13}px system-ui, -apple-system, sans-serif`
     ctx.textAlign = 'center'
     ctx.fillText(
-      inputMode === 'keyboard' ? 'Use arrow keys to navigate' : 'Trace the path from green to red',
+      inputMode === 'keyboard' ? 'Use arrow keys to navigate'
+        : atExitRef.current ? 'Click the red circle to finish'
+        : 'Click green, draw to red',
       logicalW / 2,
       logicalH - 8,
     )
@@ -259,9 +274,18 @@ export function MazeCanvas({
 
     // Exit marker
     const exitCenter = cellCenter(maze.exit.x, maze.exit.y)
+    const exitR = RENDERING.MARKER_RADIUS * (cellSize / RENDERING.CELL_SIZE)
+    // "Click to finish" ring when path reaches exit
+    if (atExitRef.current) {
+      ctx.strokeStyle = RENDERING.EXIT_COLOR
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.arc(exitCenter.px, exitCenter.py, exitR + 6, 0, Math.PI * 2)
+      ctx.stroke()
+    }
     ctx.fillStyle = RENDERING.EXIT_COLOR
     ctx.beginPath()
-    ctx.arc(exitCenter.px, exitCenter.py, RENDERING.MARKER_RADIUS * (cellSize / RENDERING.CELL_SIZE), 0, Math.PI * 2)
+    ctx.arc(exitCenter.px, exitCenter.py, exitR, 0, Math.PI * 2)
     ctx.fill()
 
     // User's trace path (pointer mode)
@@ -400,6 +424,18 @@ export function MazeCanvas({
   const EXIT_THRESHOLD = 0.05 // 5% of canvas dimension
   const START_THRESHOLD = 0.08 // 8% for start zone (generous)
 
+  // Submit helper: finalize path and send events
+  const finishPath = useCallback(() => {
+    completedRef.current = true
+    atExitRef.current = false
+    dragRef.current.dragging = false
+    const mc = mouseCollectorRef.current
+    if (mc) {
+      mc.stop()
+      onPathComplete(mc.getEvents())
+    }
+  }, [onPathComplete])
+
   // Pointer event handlers for drag path tracking
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -415,16 +451,30 @@ export function MazeCanvas({
       const py = (e.clientY - rect.top) * scale
 
       if (imageMode) {
-        // Image mode: check if near start position
-        if (!startPosition) return
         const nx = px / mazePixelW
         const ny = py / mazePixelH
+
+        // Click on exit to finish (if path exists and reached exit zone)
+        if (exitPosition && freeDrawPathRef.current.length > 0 && dragRef.current.dragging) {
+          const dx = nx - exitPosition.x
+          const dy = ny - exitPosition.y
+          if (Math.sqrt(dx * dx + dy * dy) < EXIT_THRESHOLD * 1.5) {
+            finishPath()
+            return
+          }
+        }
+
+        // Click on start to begin/restart
+        if (!startPosition) return
         const dx = nx - startPosition.x
         const dy = ny - startPosition.y
         if (Math.sqrt(dx * dx + dy * dy) > START_THRESHOLD) return
 
+        // (Re)start: reset collector and path for new attempt
+        mouseCollectorRef.current?.reset()
+        completedRef.current = false
+        atExitRef.current = false
         const drag = dragRef.current
-        if (!drag.dragging) mouseCollectorRef.current?.reset()
         canvas.setPointerCapture(e.pointerId)
         drag.dragging = true
         freeDrawPathRef.current = [{ x: nx, y: ny }]
@@ -436,14 +486,23 @@ export function MazeCanvas({
       const cell = pxToCell(px, py)
       if (!cell || !maze) return
 
+      // Click on exit to finish (if path reaches exit cell)
+      if (cell.x === maze.exit.x && cell.y === maze.exit.y && dragRef.current.path.length > 0) {
+        const last = dragRef.current.path[dragRef.current.path.length - 1]
+        if (last && last.x === maze.exit.x && last.y === maze.exit.y) {
+          finishPath()
+          return
+        }
+      }
+
       // Must start on the start cell
       if (cell.x !== maze.start.x || cell.y !== maze.start.y) return
 
-      // Reset mouse collector on first drag start to discard pre-interaction hover events
+      // (Re)start: reset collector and path for new attempt
+      mouseCollectorRef.current?.reset()
+      completedRef.current = false
+      atExitRef.current = false
       const drag = dragRef.current
-      if (!drag.dragging) {
-        mouseCollectorRef.current?.reset()
-      }
 
       canvas.setPointerCapture(e.pointerId)
       drag.dragging = true
@@ -452,7 +511,7 @@ export function MazeCanvas({
       drag.currentCell = cell
       draw()
     },
-    [maze, pxToCell, logicalW, draw, paused, imageMode, startPosition, mazePixelW, mazePixelH],
+    [maze, pxToCell, logicalW, draw, paused, imageMode, startPosition, exitPosition, mazePixelW, mazePixelH, finishPath],
   )
 
   const handlePointerMove = useCallback(
@@ -487,12 +546,16 @@ export function MazeCanvas({
           const dx = clamped.x - exitPosition.x
           const dy = clamped.y - exitPosition.y
           if (Math.sqrt(dx * dx + dy * dy) < EXIT_THRESHOLD) {
-            completedRef.current = true
-            drag.dragging = false
-            if (mc) {
-              mc.stop()
-              onPathComplete(mc.getEvents())
+            if (e.buttons > 0) {
+              // Touch/active drag: auto-submit (natural for touch UX)
+              finishPath()
+            } else {
+              // Hover (mouse released): wait for click on exit
+              atExitRef.current = true
+              draw()
             }
+          } else {
+            atExitRef.current = false
           }
         }
         return
@@ -536,44 +599,40 @@ export function MazeCanvas({
 
       // Check if reached exit
       if (cell.x === maze.exit.x && cell.y === maze.exit.y) {
-        completedRef.current = true
-        drag.dragging = false
-        const mc = mouseCollectorRef.current
-        if (mc) {
-          mc.stop()
-          onPathComplete(mc.getEvents())
+        if (e.buttons > 0) {
+          // Touch/active drag: auto-submit
+          finishPath()
+        } else {
+          // Hover (mouse released): wait for click on exit
+          atExitRef.current = true
+          draw()
         }
+      } else {
+        atExitRef.current = false
       }
     },
-    [maze, pxToCell, canPass, logicalW, draw, onCellVisit, onPositionVisit, onPathComplete, paused, imageMode, mazePixelW, mazePixelH, exitPosition],
+    [maze, pxToCell, canPass, logicalW, draw, onCellVisit, onPositionVisit, onPathComplete, paused, imageMode, mazePixelW, mazePixelH, exitPosition, finishPath],
   )
 
   const handlePointerUp = useCallback(() => {
-    if (paused) return
-    const drag = dragRef.current
-    if (!drag.dragging) return
-    // If they released without reaching exit, reset the path
-    drag.dragging = false
-    drag.path = []
-    drag.visitedCells.clear()
-    drag.currentCell = null
-    freeDrawPathRef.current = []
-    draw()
-  }, [draw, paused])
+    // No-op: path persists after mouse release. User continues drawing
+    // by hovering. Click the start marker to restart from scratch.
+  }, [])
 
-  // P1 fix: Reset drag state when entering paused mode (probe overlay).
-  // Without this, pointerUp during a probe is ignored (paused=true), leaving
-  // a stale drag that resumes on hover when the probe closes.
+  // Pause/resume drag tracking during probes. Path state is preserved
+  // so the user picks up where they left off after answering the probe.
   useEffect(() => {
     if (paused && dragRef.current.dragging) {
       dragRef.current.dragging = false
-      dragRef.current.path = []
-      dragRef.current.visitedCells.clear()
-      dragRef.current.currentCell = null
-      freeDrawPathRef.current = []
-      draw()
+      // Don't clear path/visitedCells/freeDrawPath — user resumes after probe
+    } else if (!paused && !completedRef.current) {
+      // Resume tracking if there was an active path
+      const hasPath = dragRef.current.path.length > 0 || freeDrawPathRef.current.length > 0
+      if (hasPath) {
+        dragRef.current.dragging = true
+      }
     }
-  }, [paused, draw])
+  }, [paused])
 
   // Keyboard mode: watch for arrow key presses and check exit (grid mode only)
   useEffect(() => {
@@ -611,6 +670,7 @@ export function MazeCanvas({
   // Reset completed flag when maze or image changes
   useEffect(() => {
     completedRef.current = false
+    atExitRef.current = false
     const drag = dragRef.current
     drag.dragging = false
     drag.path = []

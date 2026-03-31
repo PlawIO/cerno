@@ -568,7 +568,7 @@ export function Cerno({
           } else {
             setState('failed')
             setErrorMsg(friendlyError(result.error_code))
-            fetchChallenge()
+            // Don't auto-retry: user sees error + "Try again" button
           }
         }
       } catch (err) {
@@ -603,7 +603,7 @@ export function Cerno({
       if (!result.success || !result.completion_token) {
         setState('failed')
         setErrorMsg(friendlyError('probe_failed', result.error))
-        fetchChallenge()
+        // Don't auto-retry: user sees error + "Try again" button
         return
       }
 
@@ -654,7 +654,7 @@ export function Cerno({
         armingProbeIdRef.current = null
         setState('failed')
         setErrorMsg(friendlyError('probe_failed', result.error))
-        fetchChallenge()
+        // Don't auto-retry: user sees error + "Try again" button
         return
       }
 
@@ -697,7 +697,7 @@ export function Cerno({
         armingProbeIdRef.current = null
         setState('failed')
         setErrorMsg(friendlyError('probe_failed', result.error))
-        fetchChallenge()
+        // Don't auto-retry: user sees error + "Try again" button
         return
       }
 
