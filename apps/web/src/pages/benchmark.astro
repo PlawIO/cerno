@@ -444,6 +444,7 @@
         var cMaze=null,cDrag=null,cCompleted=false,cLogW,cLogH;
         var cRawEvents=[],cChallenge=null,cPow=null,cKeyPair=null;
         var cTimerStart=null,cTimerIv=null;
+        var cProbes=null,cProbeTokens=[],cProbeActive=false,cProbeTicket=null,cCompletedProbeIds=new Set();
 
         var cernoCanvas=document.getElementById('cerno-canvas');
         var cernoCtx=cernoCanvas.getContext('2d');
@@ -527,7 +528,7 @@
         });
 
         cernoCanvas.addEventListener('pointermove',function(e){
-          if(!cDrag||!cDrag.dragging||cCompleted)return;
+          if(!cDrag||!cDrag.dragging||cCompleted||cProbeActive)return;
           var co=cCoords(e);cRawEvents.push({x:co.px/cLogW,y:co.py/cLogH,t:performance.now(),type:'move',pointer_type:cPT(e)});
           var cl=cP2C(co.px,co.py);if(!cl||!cDrag.current)return;
           if(cl.x===cDrag.current.x&&cl.y===cDrag.current.y)return;
@@ -536,14 +537,102 @@
           if(cDrag.path.length>=2){var prev=cDrag.path[cDrag.path.length-2];if(prev.x===cl.x&&prev.y===cl.y){var rm=cDrag.path.pop();cDrag.visited.delete(rm.x+','+rm.y);cDrag.current=cl;cDraw();return;}}
           if(cDrag.visited.has(k))return;
           cDrag.path.push({x:cl.x,y:cl.y});cDrag.visited.add(k);cDrag.current=cl;cDraw();
+          // Probe trigger detection
+          if(cProbes){for(var pi=0;pi<cProbes.length;pi++){var pr=cProbes[pi];if(cl.x===pr.trigger_cell.x&&cl.y===pr.trigger_cell.y&&!cCompletedProbeIds.has(pr.id)){cTriggerProbe(pr);return;}}}
           if(cl.x===cMaze.exit.x&&cl.y===cMaze.exit.y){cCompleted=true;cDrag.dragging=false;cRawEvents.push({x:co.px/cLogW,y:co.py/cLogH,t:performance.now(),type:'up',pointer_type:cPT(e)});cStopTimer();cSubmit();}
         });
 
         cernoCanvas.addEventListener('pointerup',function(){
-          if(!cDrag||!cDrag.dragging)return;
+          if(!cDrag||!cDrag.dragging||cProbeActive)return;
           cDrag.dragging=false;cDrag.path=[];cDrag.visited=new Set();cDrag.current=null;cRawEvents=[];cDraw();
           if(cTimerIv){cStopTimer();cEl('-');}
         });
+
+        // ═══ Stroop Probe Handling ═══
+        var PROBE_COLOR_NAMES={'#ef4444':'red','#3b82f6':'blue','#22c55e':'green','#f59e0b':'yellow','#8b5cf6':'purple','#ec4899':'pink','#f97316':'orange','#06b6d4':'cyan','#a855f7':'purple'};
+        var PROBE_SHAPES={'red':'square','blue':'circle','green':'triangle','yellow':'diamond','purple':'star','pink':'hexagon','orange':'hexagon','cyan':'circle'};
+        function cProbeShapeSvg(shape,color){
+          var s=40;
+          if(shape==='circle')return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="'+color+'" opacity="0.7"/></svg>';
+          if(shape==='square')return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><rect x="4" y="4" width="32" height="32" rx="4" fill="'+color+'" opacity="0.7"/></svg>';
+          if(shape==='triangle')return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><polygon points="20,4 36,36 4,36" fill="'+color+'" opacity="0.7"/></svg>';
+          if(shape==='diamond')return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><polygon points="20,2 38,20 20,38 2,20" fill="'+color+'" opacity="0.7"/></svg>';
+          if(shape==='star')return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><polygon points="20,2 25,15 38,15 27,24 31,38 20,29 9,38 13,24 2,15 15,15" fill="'+color+'" opacity="0.7"/></svg>';
+          if(shape==='hexagon')return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill="'+color+'" opacity="0.7"/></svg>';
+          return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="'+color+'" opacity="0.7"/></svg>';
+        }
+
+        function cTriggerProbe(probe){
+          cProbeActive=true;cDrag.dragging=false;
+          cSt('Probe: '+probe.instruction);
+
+          // Arm the probe immediately
+          fetch(C_API+'/probe/arm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge_id:cChallenge.id,site_key:C_KEY,session_id:C_SID,probe_id:probe.id,events:cRawEvents})}).then(function(r){return r.json();}).then(function(result){
+            if(result.success&&result.probe_ticket)cProbeTicket=result.probe_ticket;
+          }).catch(function(){});
+
+          // Create overlay
+          var container=cernoCanvas.parentElement;container.style.position='relative';
+          var ov=document.createElement('div');ov.id='cerno-probe-overlay';
+          ov.style.cssText='position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;pointer-events:none;background:rgba(0,0,0,0.5);border-radius:12px;';
+
+          var box=document.createElement('div');
+          box.style.cssText='background:var(--card-bg,#1e293b);border-radius:12px;padding:20px 24px;text-align:center;pointer-events:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-width:280px;';
+
+          var instr=document.createElement('div');
+          instr.textContent=probe.instruction;
+          instr.style.cssText='color:var(--fg,#f1f5f9);font-size:15px;margin-bottom:16px;font-weight:600;font-family:system-ui,sans-serif;';
+          box.appendChild(instr);
+
+          var grid=document.createElement('div');
+          grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;';
+
+          probe.cells.forEach(function(cell){
+            var cn=PROBE_COLOR_NAMES[cell.color]||'colored';
+            var sh=PROBE_SHAPES[cn]||'circle';
+            var btn=document.createElement('button');
+            btn.style.cssText='width:72px;height:72px;border:3px solid transparent;border-radius:12px;cursor:pointer;background:'+cell.color+';display:flex;align-items:center;justify-content:center;transition:border-color 0.15s,transform 0.1s;';
+            btn.innerHTML=cProbeShapeSvg(sh,'rgba(255,255,255,0.85)');
+            btn.setAttribute('aria-label',cn+' '+sh);
+            btn.addEventListener('mouseenter',function(){btn.style.borderColor='#fff';btn.style.transform='scale(1.05)';});
+            btn.addEventListener('mouseleave',function(){btn.style.borderColor='transparent';btn.style.transform='scale(1)';});
+            btn.addEventListener('click',function(){cOnProbeAnswer(probe,cell);});
+            grid.appendChild(btn);
+          });
+          box.appendChild(grid);
+
+          // Countdown bar
+          var bar=document.createElement('div');
+          bar.style.cssText='margin-top:12px;height:4px;border-radius:2px;background:#334155;overflow:hidden;width:100%;';
+          var fill=document.createElement('div');
+          fill.style.cssText='height:100%;background:#2dd4bf;width:100%;transition:width 5s linear,background 5s linear;';
+          bar.appendChild(fill);box.appendChild(bar);
+          setTimeout(function(){fill.style.width='0%';fill.style.background='#ef4444';},50);
+
+          ov.appendChild(box);container.appendChild(ov);
+        }
+
+        async function cOnProbeAnswer(probe,cell){
+          if(!cProbeTicket){
+            // Ticket not ready yet, wait briefly
+            for(var w=0;w<10&&!cProbeTicket;w++)await new Promise(function(r){setTimeout(r,100);});
+          }
+          if(!cProbeTicket){cSt('Probe arm failed','var(--red)');cProbeActive=false;return;}
+          try{
+            var res=await fetch(C_API+'/probe/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge_id:cChallenge.id,session_id:C_SID,probe_ticket:cProbeTicket,tapped_cell:{x:cell.x,y:cell.y}})});
+            var result=await res.json();
+            if(result.success&&result.completion_token){
+              cProbeTokens.push(result.completion_token);
+              cCompletedProbeIds.add(probe.id);
+            }else{cSt('Wrong answer — try again','var(--red)');cFetch();cProbeActive=false;return;}
+          }catch(err){cSt('Probe error','var(--red)');cProbeActive=false;return;}
+
+          // Remove overlay, resume drag
+          var ov=document.getElementById('cerno-probe-overlay');if(ov)ov.remove();
+          cProbeActive=false;cProbeTicket=null;
+          cDrag.dragging=true;
+          cSt('Tracing...');
+        }
 
         async function cSubmit(){
           if(!cChallenge){cSt('No API (local only)','#d97706');return;}
@@ -556,7 +645,9 @@
             for(var di=0;di<dArr.length;di++)eDig+=dArr[di].toString(16).padStart(2,'0');
             var binding=cChallenge.id+':'+cChallenge.site_key+':'+cChallenge.expires_at+':'+eDig;
             var sig=await cSign(binding,cKeyPair.priv);
-            var res=await fetch(C_API+'/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge_id:cChallenge.id,site_key:C_KEY,session_id:C_SID,events:cRawEvents,pow_proof:pow,public_key:cKeyPair.pub,signature:sig,timestamp:Date.now()})});
+            var verifyBody={challenge_id:cChallenge.id,site_key:C_KEY,session_id:C_SID,events:cRawEvents,pow_proof:pow,public_key:cKeyPair.pub,signature:sig,timestamp:Date.now()};
+            if(cProbeTokens.length>0)verifyBody.probe_completion_tokens=cProbeTokens;
+            var res=await fetch(C_API+'/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(verifyBody)});
             var result=await res.json();
             if(result.success){var s=result.score!=null?(result.score*100).toFixed(0)+'%':'pass';cSc(s,'pass');cSt('Pass','var(--green)');}
             else{cSc('fail','fail');cSt(result.error_code==='behavioral_rejected'?'Bot pattern':result.error_code?result.error_code.replace(/_/g,' '):'Rejected','var(--red)');}
@@ -565,15 +656,18 @@
 
         async function cFetch(){
           cSt('Loading...');cSc('-');cDrag=null;cCompleted=false;cRawEvents=[];cStopTimer();cEl('-');
+          cProbes=null;cProbeTokens=[];cProbeActive=false;cProbeTicket=null;cCompletedProbeIds=new Set();
+          var ov=document.getElementById('cerno-probe-overlay');if(ov)ov.remove();
           if(cPow&&cPow.cancel)cPow.cancel();
           try{
             if(!cKeyPair)cKeyPair=await cGenKP();
             var res=await fetch(C_API+'/challenge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site_key:C_KEY,public_key:cKeyPair.pub})});
             if(!res.ok)throw new Error('HTTP '+res.status);
             cChallenge=await res.json();C_CELL=cChallenge.cell_size||40;
+            cProbes=cChallenge.probes||null;
             cMaze=cGen(cChallenge.maze_seed,cChallenge.maze_width,cChallenge.maze_height,cChallenge.maze_difficulty);
             cRecalc();cPow=cStartPow(cChallenge.pow_challenge,cChallenge.pow_difficulty);
-            cSt('Trace from green to red');cDraw();
+            cSt(cProbes?'Trace from green to red (probe active)':'Trace from green to red');cDraw();
           }catch(err){
             cChallenge=null;C_CELL=40;cMaze=cGen((Date.now()^(Math.random()*0xFFFFFFFF))>>>0,7,7,0.3);cRecalc();cDraw();
             cSt('API unavailable (local)','var(--yellow)');
