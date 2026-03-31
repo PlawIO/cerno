@@ -166,18 +166,40 @@ export function StroopOverlay({
 
       <div
         style={{
-          fontSize: 16,
-          fontWeight: 600,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
           marginBottom: 16,
-          color: 'var(--cerno-fg)',
           fontFamily: 'var(--cerno-font)',
         }}
         aria-label="Quick color verification"
       >
         {probe.instruction_svg ? (
-          <span dangerouslySetInnerHTML={{ __html: probe.instruction_svg }} />
+          <span
+            style={{ fontSize: 16, fontWeight: 600, color: 'var(--cerno-fg)' }}
+            dangerouslySetInnerHTML={{ __html: probe.instruction_svg }}
+          />
         ) : (
-          probe.instruction
+          <div style={{
+            fontSize: 20,
+            fontWeight: 700,
+            color: 'var(--cerno-fg)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                background: probe.target_color,
+                flexShrink: 0,
+              }}
+            />
+            {probe.instruction}
+          </div>
         )}
       </div>
 
@@ -190,11 +212,12 @@ export function StroopOverlay({
       >
         {probe.cells.map((cell) => {
           const shape = shapeForColor(cell.color)
+          const name = colorName(cell.color)
           return (
             <button
               key={`${cell.x}-${cell.y}`}
               type="button"
-              aria-label={`${colorName(cell.color)} ${shape}`}
+              aria-label={`${name} ${shape}`}
               onClick={() => handleCellTap(cell)}
               style={{
                 width: buttonSize,
@@ -205,18 +228,21 @@ export function StroopOverlay({
                 cursor: 'pointer',
                 transition: 'transform 0.1s',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 2,
                 pointerEvents: 'auto',
+                padding: 4,
               }}
               onMouseDown={(e) => {
-                (e.target as HTMLElement).style.transform = 'scale(0.95)'
+                (e.currentTarget as HTMLElement).style.transform = 'scale(0.95)'
               }}
               onMouseUp={(e) => {
-                (e.target as HTMLElement).style.transform = 'scale(1)'
+                (e.currentTarget as HTMLElement).style.transform = 'scale(1)'
               }}
             >
-              <svg width={buttonSize * 0.4} height={buttonSize * 0.4} viewBox="0 0 20 20" style={{ opacity: 0.7, pointerEvents: 'none' }}>
+              <svg width={buttonSize * 0.3} height={buttonSize * 0.3} viewBox="0 0 20 20" style={{ opacity: 0.6, pointerEvents: 'none' }}>
                 {shape === 'circle' && <circle cx="10" cy="10" r="8" fill="white" />}
                 {shape === 'square' && <rect x="2" y="2" width="16" height="16" fill="white" />}
                 {shape === 'triangle' && <polygon points="10,2 18,18 2,18" fill="white" />}

@@ -96,7 +96,7 @@ export function generateStroopProbe(
   return {
     id: probeId,
     type: 'color_tap',
-    instruction: `${verb} the ${targetColor.name} ${targetColor.shape}`,
+    instruction: `${verb} the ${targetColor.name} button`,
     target_color: targetColor.hex,
     distractor_colors: distractors.map((d) => d.hex),
     cells: shuffledCells,

@@ -11,7 +11,7 @@ describe('generateStroopProbe', () => {
     const probe = generateStroopProbe(maze, rand, 'test-probe-1')
     expect(probe).not.toBeNull()
     expect(probe!.type).toBe('color_tap')
-    expect(probe!.instruction).toMatch(/^(Tap|Select|Find|Touch|Pick) the \w+ \w+$/)
+    expect(probe!.instruction).toMatch(/^(Tap|Select|Find|Touch|Pick) the \w+ button$/)
     expect(probe!.cells.length).toBeGreaterThanOrEqual(2)
     expect(probe!.target_color).toBeTruthy()
     expect(probe!.trigger_cell).toBeTruthy()
