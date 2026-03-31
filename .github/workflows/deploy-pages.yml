@@ -6,6 +6,9 @@ on:
     paths:
       - 'apps/web/**'
       - 'apps/docs/**'
+      - 'packages/react/**'
+      - 'packages/core/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
