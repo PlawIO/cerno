@@ -112,6 +112,21 @@ export interface Challenge {
   scoring_version?: string
   /** Session ID bound at issuance, used to tie multiple challenges together (Phase K battery) */
   session_id?: string
+  /** Maze rendering mode: 'grid' = seed-based client rendering, 'image' = server-rendered PNG.
+   *  When 'image', server uses corridor-based path validation (tolerance for free-draw). */
+  maze_render_mode?: 'grid' | 'image'
+
+  // ── Server-rendered maze (Phase 2 hardening) ──
+  /** Base64-encoded PNG of the server-rendered maze (replaces seed-based client rendering) */
+  maze_image?: string
+  /** Pixel width of the maze image */
+  maze_image_width?: number
+  /** Pixel height of the maze image */
+  maze_image_height?: number
+  /** Start position in normalized coordinates (0-1) relative to maze image */
+  start_position?: Point
+  /** Exit position in normalized coordinates (0-1) relative to maze image */
+  exit_position?: Point
 }
 
 export interface ValidationRequest {
@@ -179,12 +194,19 @@ export interface StroopProbe {
   type: 'color_tap'
   /** Human-readable instruction, e.g. "Tap the blue cell" */
   instruction: string
-  target_color: string
-  distractor_colors: string[]
-  /** Colored cells shown to the user. Exactly one has isTarget=true. */
-  cells: Array<{ x: number; y: number; color: string; isTarget: boolean }>
-  /** When the user's cursor reaches this cell, the probe fires */
+  /** SVG markup of the instruction text (text-as-path, no DOM-readable text nodes).
+   *  Set by cerno-cloud post-processing. Client renders this instead of instruction text. */
+  instruction_svg?: string
+  /** Server-only: hex color of the target cell. Stripped from client responses. */
+  target_color?: string
+  /** Server-only: hex colors of distractor cells. Stripped from client responses. */
+  distractor_colors?: string[]
+  /** Colored cells shown to the user. isTarget is server-only (stripped from client responses). */
+  cells: Array<{ x: number; y: number; color: string; isTarget?: boolean }>
+  /** When the user's cursor reaches this cell, the probe fires (grid mode) */
   trigger_cell: Point
+  /** Normalized trigger position (0-1) for image mode. Set by cerno-cloud. */
+  trigger_position?: Point
 }
 
 export interface ProbeResponse {

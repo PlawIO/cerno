@@ -31,6 +31,9 @@ interface ProbeCompletionClaims {
   site_key: string
   correct: boolean
   reaction_time_ms: number
+  /** Server-derived probe anchor: last event timestamp (collector-relative)
+   *  from the arm request trace. Used for K-H1 motor continuity. */
+  probe_anchor_t: number
   jti: string
 }
 
@@ -188,6 +191,15 @@ export async function armProbe(
     return { success: false, error: 'probe_store_unavailable' }
   }
 
+  // K-H1: Capture the last event timestamp from the arm request trace.
+  // This is the collector-relative timestamp at probe trigger, used as the
+  // server-derived anchor for motor continuity analysis (replacing client's
+  // probe_shown_at which an attacker can fabricate).
+  const moveEvents = request.events.filter(
+    e => e.type === 'move' || e.type === 'down' || e.type === 'up',
+  )
+  const lastEventT = moveEvents.length > 0 ? moveEvents[moveEvents.length - 1].t : 0
+
   const armId = globalThis.crypto.randomUUID()
   const armedAt = Date.now()
   const deadlineAt = Math.min(challenge.expires_at, armedAt + 5_000)
@@ -199,6 +211,7 @@ export async function armProbe(
     session_id: request.session_id,
     armed_at: armedAt,
     deadline_at: deadlineAt,
+    last_event_t: lastEventT,
   }, Math.max(1_000, deadlineAt - armedAt))
 
   const signingKid = config.secrets?.find((item) => item.value === config.secret)?.kid
@@ -269,6 +282,7 @@ export async function completeProbe(
     site_key: challenge.site_key,
     correct: true,
     reaction_time_ms: reactionTime,
+    probe_anchor_t: armSession.last_event_t,
   }, config.secret, Math.max(1_000, challenge.expires_at - Date.now()), signingKid)
 
   return {
@@ -284,7 +298,7 @@ export async function verifyProbeCompletionTokens(
   tokens: string[],
 ): Promise<{
   valid: boolean
-  results: Array<{ probe_id: string; correct: boolean; reaction_time_ms: number }>
+  results: Array<{ probe_id: string; correct: boolean; reaction_time_ms: number; probe_anchor_t: number }>
 }> {
   const requiredCount = challenge.requirements?.probe.required_completion_count ?? 0
   if (requiredCount === 0) {
@@ -295,7 +309,7 @@ export async function verifyProbeCompletionTokens(
   }
 
   const seen = new Set<string>()
-  const results: Array<{ probe_id: string; correct: boolean; reaction_time_ms: number }> = []
+  const results: Array<{ probe_id: string; correct: boolean; reaction_time_ms: number; probe_anchor_t: number }> = []
   for (const token of tokens) {
     const claims = await verifyJwt<ProbeCompletionClaims>(token, config.secret, config.secrets)
     if (!claims || claims.kind !== 'probe-completion') {
@@ -319,6 +333,7 @@ export async function verifyProbeCompletionTokens(
       probe_id: claims.probe_id,
       correct: claims.correct,
       reaction_time_ms: claims.reaction_time_ms,
+      probe_anchor_t: claims.probe_anchor_t ?? 0,
     })
   }
 

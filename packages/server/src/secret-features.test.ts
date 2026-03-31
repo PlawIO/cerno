@@ -165,6 +165,8 @@ describe('scoreSecretFeatures', () => {
       raw_timing_entropy: 0,
       probe_motor_continuity: 0,
       coalesced_event_ratio: 1,
+      timing_kurtosis: NaN,
+      velocity_curvature_r2: NaN,
     })
     expect(score).toBeLessThan(0.9)
   })
@@ -181,6 +183,7 @@ describe('scoreSecretFeatures', () => {
       probe_motor_continuity: 0.5,
       coalesced_event_ratio: NaN,
       timing_kurtosis: 12.0,
+      velocity_curvature_r2: NaN,
     })
     // Same features but with a valid coalesced_event_ratio near baseline
     const withValid = scoreSecretFeatures({
@@ -193,6 +196,7 @@ describe('scoreSecretFeatures', () => {
       probe_motor_continuity: 0.5,
       coalesced_event_ratio: 3.0, // At baseline mean
       timing_kurtosis: 12.0,
+      velocity_curvature_r2: NaN,
     })
     // NaN version should not be penalized (score should be similar or higher
     // than version with a value at the mean)

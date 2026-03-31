@@ -190,6 +190,7 @@ describe('MemoryStore', () => {
         session_id: 'sess-1',
         armed_at: Date.now(),
         deadline_at: Date.now() + 5_000,
+        last_event_t: 3500,
       }
       await store.setProbeArmSession('arm-1', session, 5_000)
       const consumed = await store.consumeProbeArmSession('arm-1')
@@ -206,6 +207,7 @@ describe('MemoryStore', () => {
         session_id: 'sess-1',
         armed_at: Date.now(),
         deadline_at: Date.now() + 5_000,
+        last_event_t: 3500,
       }
       await store.setProbeArmSession('arm-2', session, 5_000)
       await store.consumeProbeArmSession('arm-2')

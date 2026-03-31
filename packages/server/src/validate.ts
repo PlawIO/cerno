@@ -18,7 +18,8 @@ import { verifyPow } from './pow-verify.js'
 import { validateMazePath } from './maze-solver.js'
 import { scoreBehavior } from './behavioral-scoring.js'
 import { generateToken } from './token.js'
-import { extractSecretFeatures, scoreSecretFeatures } from './secret-features.js'
+import { extractSecretFeatures, scoreSecretFeatures, type SecretFeatures } from './secret-features.js'
+import { updateAdaptiveBaselines } from './adaptive-baselines.js'
 import { computeAdaptiveDifficulty } from './adaptive-pow.js'
 import { scoreProbePerformance } from './probe-validator.js'
 import { updateReputation, reputationKey, computeConsistencyBonus } from './reputation.js'
@@ -29,15 +30,42 @@ import { sha256Hex } from './crypto-utils.js'
 import { PUBLIC_SCORE_WEIGHT, SECRET_SCORE_WEIGHT, PROBE_BONUS_MAX, MAX_EVENTS } from './scoring-constants.js'
 
 /**
- * Verify that the client signed the challenge_id with the ephemeral private key
- * matching the submitted public key. Prevents request replay from different contexts.
+ * Canonical event serialization for digest binding.
+ * Must match the client-side canonicalizeEvents() exactly.
+ * Covers pointer_type and coalesced_count so attackers can't swap
+ * input mode or forge hardware coalescing signals post-signing.
+ */
+function canonicalizeEvents(
+  events: Array<{ t: number; x: number; y: number; type: string; pointer_type?: string | null; coalesced_count?: number | null }>,
+): string {
+  return JSON.stringify(events.map(e => [e.t, e.x, e.y, e.type, e.pointer_type ?? null, e.coalesced_count ?? null]))
+}
+
+async function computeEventsDigest(
+  events: Array<{ t: number; x: number; y: number; type: string; pointer_type?: string | null; coalesced_count?: number | null }>,
+): Promise<string> {
+  const canonical = canonicalizeEvents(events)
+  const bytes = new TextEncoder().encode(canonical)
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  const arr = new Uint8Array(digest)
+  let hex = ''
+  for (const b of arr) hex += b.toString(16).padStart(2, '0')
+  return hex
+}
+
+/**
+ * Verify that the client signed the challenge_id + events digest with the
+ * ephemeral private key matching the submitted public key.
+ * The events digest binds the behavioral data to the signature, preventing
+ * post-signing event replacement via page.route() or similar intercepts.
  */
 function buildChallengeBindingPayload(
   challengeId: string,
   siteKey: string,
   expiresAt: number,
+  eventsDigest: string,
 ): string {
-  return `${challengeId}:${siteKey}:${expiresAt}`
+  return `${challengeId}:${siteKey}:${expiresAt}:${eventsDigest}`
 }
 
 async function verifyCryptoBinding(
@@ -192,6 +220,7 @@ export async function createChallenge(
     },
     webauthn_request_options: webauthnRequestOptions,
     scoring_version: config.scoringVersion,
+    maze_render_mode: config.mazeRenderMode,
   }
 
   // Generate Stroop probes if enabled
@@ -215,6 +244,22 @@ export async function createChallenge(
   }
 
   await config.store.setChallenge(id, challenge, ttl)
+
+  // Sanitize for client: strip fields that reveal the probe answer.
+  // The full challenge (with isTarget, target_color, distractor_colors)
+  // remains in the store for server-side validation in completeProbe.
+  if (challenge.probes) {
+    return {
+      ...challenge,
+      probes: challenge.probes.map(probe => ({
+        id: probe.id,
+        type: probe.type,
+        instruction: probe.instruction,
+        cells: probe.cells.map(({ x, y, color }) => ({ x, y, color })),
+        trigger_cell: probe.trigger_cell,
+      })),
+    }
+  }
 
   return challenge
 }
@@ -368,8 +413,9 @@ export async function validateSubmission(
       error_code: ErrorCode.INVALID_SIGNATURE,
     }
   }
+  const eventsDigest = await computeEventsDigest(request.events)
   const sigValid = await verifyCryptoBinding(
-    buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at),
+    buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at, eventsDigest),
     request.signature,
     request.public_key,
   )
@@ -429,12 +475,14 @@ export async function validateSubmission(
   )
 
   // 8. Verify maze path (use challenge's authoritative seed, not client-supplied)
+  const pathMode = challenge.maze_render_mode === 'image' ? 'corridor' : 'strict'
   const mazeResult = validateMazePath(
     challenge.maze_seed,
     correctedEvents,
     challenge.maze_width,
     challenge.maze_height,
     challenge.maze_difficulty,
+    pathMode,
   )
   if (!mazeResult.valid) {
     await emit({ error_code: ErrorCode.INVALID_PATH })
@@ -453,7 +501,7 @@ export async function validateSubmission(
       accuracy: number
     }
     | undefined
-  let probeResults: Array<{ probe_id: string; correct: boolean; reaction_time_ms: number }> = []
+  let probeResults: Array<{ probe_id: string; correct: boolean; reaction_time_ms: number; probe_anchor_t: number }> = []
   if (challenge.requirements?.probe.mode === 'required' && challenge.probes && challenge.probes.length > 0) {
     const verifiedProbeTokens = await verifyProbeCompletionTokens(
       config,
@@ -502,29 +550,19 @@ export async function validateSubmission(
     ? await store.getReputation(repKey)
     : null
 
-  // K-H1: Build probe timing data for motor-stream correlation
-  // Cross-validate: probe_id must match a challenge-issued probe, timestamps must fall
-  // within trace time range, count capped at challenge probe count.
-  const traceEnd = correctedEvents.length > 0
-    ? correctedEvents[correctedEvents.length - 1].t
-    : 0
-  const challengeProbeIds = new Set(challenge.probes?.map(p => p.id) ?? [])
-  // Only accept probe timings if the challenge actually issued probes.
-  // Without this gate, a client can fabricate probe_responses on plain maze challenges.
-  // If probes were issued but client omits probe_responses, treat as zero motor
-  // continuity (empty array) so the K-H1 gate fires instead of being bypassed.
-  const hasIssuedProbes = challengeProbeIds.size > 0
+  // K-H1: Build probe timing data for motor-stream correlation.
+  // Server-derived: use probe_anchor_t from completion token JWTs (set during
+  // /probe/arm from the last event timestamp in the arm request trace).
+  // This replaces the client-reported probe_shown_at which an attacker can fabricate.
+  const hasIssuedProbes = (challenge.probes?.length ?? 0) > 0
   const probeTimings = hasIssuedProbes
-    ? (request.probe_responses
-        ?.filter(pr =>
-          pr.probe_shown_at != null &&
-          pr.probe_shown_at >= 0 &&
-          pr.probe_shown_at <= traceEnd + 1000 && // allow 1s slack for async dispatch
-          challengeProbeIds.has(pr.probe_id), // must match issued probe
-        )
-        .slice(0, challengeProbeIds.size) // never accept more probes than issued
-        .map(pr => ({ probe_shown_at: pr.probe_shown_at!, reaction_time_ms: pr.reaction_time_ms }))
-      ) ?? [] // P2 fix: missing probe_responses → empty array → probe_motor_continuity=0
+    ? (probeResults.length > 0
+        ? probeResults.map(pr => ({
+            probe_shown_at: pr.probe_anchor_t,
+            reaction_time_ms: pr.reaction_time_ms,
+          }))
+        : [] // Probes issued but no valid completions → zero motor continuity
+      )
     : undefined
 
   // 10b. Secret feature scoring (Phase 2 + Phase G provider)
@@ -547,13 +585,25 @@ export async function validateSubmission(
       const result = await config.secretFeaturesProvider.score(ctx)
       secretZScores = result.zScores
       score = score * publicWeight + Math.max(0, Math.min(1, result.score)) * secretWeight
-    } catch {
-      // Provider failed, fall back to built-in scoring
-      const secretFeatures = extractSecretFeatures(correctedEvents, probeTimings)
-      rawSecretFeatures = secretFeatures as unknown as Record<string, number>
-      const secretResult = scoreSecretFeatures(secretFeatures, derivedInputType, scoringConfig)
-      secretZScores = secretResult.zScores
-      score = score * publicWeight + secretResult.score * secretWeight
+    } catch (err: unknown) {
+      // Classify error: infra errors fall back to built-in, unknown errors get severe penalty
+      const isInfra = err instanceof TypeError || err instanceof RangeError ||
+        (err instanceof Error && /timeout|memory|network|ECONNREFUSED|ETIMEDOUT/i.test(err.message))
+      if (isInfra) {
+        // Infra error: fall back to built-in scoring so humans aren't blocked
+        const secretFeatures = extractSecretFeatures(correctedEvents, probeTimings)
+        rawSecretFeatures = secretFeatures as unknown as Record<string, number>
+        const secretResult = scoreSecretFeatures(secretFeatures, derivedInputType, scoringConfig)
+        secretZScores = secretResult.zScores
+        score = score * publicWeight + secretResult.score * secretWeight
+      } else {
+        // Unknown error: severe penalty to prevent attacker-induced fallback to weaker npm scoring
+        const secretFeatures = extractSecretFeatures(correctedEvents, probeTimings)
+        rawSecretFeatures = secretFeatures as unknown as Record<string, number>
+        const secretResult = scoreSecretFeatures(secretFeatures, derivedInputType, scoringConfig)
+        secretZScores = secretResult.zScores
+        score = (score * publicWeight + secretResult.score * secretWeight) * 0.1
+      }
     }
   } else if (config.enableSecretFeatures !== false) {
     // Built-in default (ships in npm, good baseline for self-hosters)
@@ -602,6 +652,17 @@ export async function validateSubmission(
   const repTtl = config.reputationTtlMs ?? DEFAULTS.reputationTtlMs
   if (repKey && config.enableReputation !== false) {
     await updateReputation(store, repKey, score, features, repTtl)
+  }
+
+  // Adaptive baselines: Welford update from high-confidence human samples (Phase B).
+  // Fire-and-forget — collection must never block validation.
+  if (rawSecretFeatures) {
+    updateAdaptiveBaselines(
+      store,
+      rawSecretFeatures as unknown as SecretFeatures,
+      derivedInputType,
+      score,
+    ).catch(() => {})
   }
 
   const tokenTtl = config.tokenTtlMs ?? DEFAULTS.tokenTtlMs

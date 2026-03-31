@@ -1,4 +1,5 @@
 import { defineConfig } from 'astro/config'
+import react from '@astrojs/react'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -43,6 +44,7 @@ function docsDirectoryIndex() {
 export default defineConfig({
   output: 'static',
   site: 'https://cerno.sh',
+  integrations: [react()],
   vite: {
     plugins: process.env.NODE_ENV === 'development'
       ? [reactGrabClaudeCodePlugin(repoRoot), docsDirectoryIndex()]

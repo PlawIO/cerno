@@ -41,12 +41,28 @@ async function signChallengeId(
   return btoa(binary)
 }
 
-function buildChallengeBindingPayload(
-  challengeId: string,
-  siteKey: string,
-  expiresAt: number,
-): string {
-  return `${challengeId}:${siteKey}:${expiresAt}`
+async function computeEventsDigest(
+  events: Array<{ t: number; x: number; y: number; type: string; pointer_type?: string | null; coalesced_count?: number | null }>,
+): Promise<string> {
+  const canonical = JSON.stringify(events.map(e => [e.t, e.x, e.y, e.type, e.pointer_type ?? null, e.coalesced_count ?? null]))
+  const bytes = new TextEncoder().encode(canonical)
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  const arr = new Uint8Array(digest)
+  let hex = ''
+  for (const b of arr) hex += b.toString(16).padStart(2, '0')
+  return hex
+}
+
+async function signWithEvents(
+  challenge: { id: string; site_key: string; expires_at: number },
+  events: Array<{ t: number; x: number; y: number; type: string }>,
+  privateKey: CryptoKey,
+): Promise<string> {
+  const digest = await computeEventsDigest(events)
+  return signChallengeId(
+    `${challenge.id}:${challenge.site_key}:${challenge.expires_at}:${digest}`,
+    privateKey,
+  )
 }
 
 function toCanvasCoords(
@@ -149,10 +165,7 @@ describe('cernoMiddleware', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(
-      buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at),
-      keyPair.privateKey,
-    )
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     // 3. Submit verification via middleware
     const verifyReq = new Request('http://localhost/verify', {

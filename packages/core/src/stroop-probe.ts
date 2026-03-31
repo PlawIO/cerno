@@ -14,13 +14,13 @@ import type { Maze, Point, StroopProbe } from './types.js'
 import { Wall } from './types.js'
 
 const PROBE_COLORS = [
-  { name: 'blue', hex: '#3b82f6' },
-  { name: 'red', hex: '#ef4444' },
-  { name: 'green', hex: '#22c55e' },
-  { name: 'yellow', hex: '#eab308' },
-  { name: 'purple', hex: '#a855f7' },
-  { name: 'orange', hex: '#f97316' },
-]
+  { name: 'blue', hex: '#3b82f6', shape: 'circle' },
+  { name: 'red', hex: '#ef4444', shape: 'square' },
+  { name: 'green', hex: '#22c55e', shape: 'triangle' },
+  { name: 'yellow', hex: '#eab308', shape: 'diamond' },
+  { name: 'purple', hex: '#a855f7', shape: 'star' },
+  { name: 'orange', hex: '#f97316', shape: 'hexagon' },
+] as const
 
 /**
  * Generate a Stroop probe for a given maze.
@@ -50,7 +50,7 @@ export function generateStroopProbe(
   // Pick 2-3 distractor colors (different from target)
   const distractorCount = 2 + Math.floor(rand() * 2) // 2 or 3
   const available = PROBE_COLORS.filter((_, i) => i !== targetIdx)
-  const distractors: typeof PROBE_COLORS = []
+  const distractors: Array<typeof PROBE_COLORS[number]> = []
   for (let i = 0; i < distractorCount && available.length > 0; i++) {
     const idx = Math.floor(rand() * available.length)
     distractors.push(available.splice(idx, 1)[0])
@@ -86,13 +86,20 @@ export function generateStroopProbe(
     })
   }
 
+  // Shuffle cells so target isn't always at index 0
+  const shuffledCells = shuffleArray(cells, rand)
+
+  // Vary instruction phrasing so regex matching isn't trivial
+  const verbs = ['Tap', 'Select', 'Find', 'Touch', 'Pick']
+  const verb = verbs[Math.floor(rand() * verbs.length)]
+
   return {
     id: probeId,
     type: 'color_tap',
-    instruction: `Tap the ${targetColor.name} cell`,
+    instruction: `${verb} the ${targetColor.name} ${targetColor.shape}`,
     target_color: targetColor.hex,
     distractor_colors: distractors.map((d) => d.hex),
-    cells,
+    cells: shuffledCells,
     trigger_cell: triggerCell,
   }
 }

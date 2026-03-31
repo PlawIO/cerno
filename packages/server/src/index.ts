@@ -12,7 +12,8 @@ export { queryReputation, updateReputation, reputationKey, computeConsistencyBon
 
 // Scoring internals (public algorithm — the moat is calibration data, not the code)
 export { scoreBehavior } from './behavioral-scoring.js'
-export { extractSecretFeatures, scoreSecretFeatures, type ProbeTimingData } from './secret-features.js'
+export { extractSecretFeatures, scoreSecretFeatures, type ProbeTimingData, type SecretFeatures } from './secret-features.js'
+export { updateAdaptiveBaselines, welfordVariance, welfordStd } from './adaptive-baselines.js'
 export {
   beginWebAuthnRegistration,
   completeWebAuthnRegistration,
@@ -22,6 +23,7 @@ export {
 
 // Server-only types
 export type {
+  AdaptiveState,
   CaptchaStore,
   CreateChallengeRequest,
   ClientSignals,

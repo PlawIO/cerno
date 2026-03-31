@@ -1,6 +1,6 @@
 {
   "name": "@cernosh/server",
-  "version": "0.2.6",
+  "version": "0.3.1",
   "description": "Server-side validation pipeline for Cerno CAPTCHA: maze-relative behavioral scoring, PoW verification, JWT tokens, CaptchaStore interface",
   "license": "Apache-2.0",
   "repository": {
@@ -38,7 +38,7 @@
     "dist"
   ],
   "dependencies": {
-    "@cernosh/core": "^0.2.0",
+    "@cernosh/core": "^0.3.0",
     "@simplewebauthn/server": "^13.2.2",
     "jose": "^6.0.0"
   }

@@ -42,12 +42,37 @@ async function signChallengeId(
   return btoa(binary)
 }
 
+async function computeEventsDigest(
+  events: Array<{ t: number; x: number; y: number; type: string; pointer_type?: string | null; coalesced_count?: number | null }>,
+): Promise<string> {
+  const canonical = JSON.stringify(events.map(e => [e.t, e.x, e.y, e.type, e.pointer_type ?? null, e.coalesced_count ?? null]))
+  const bytes = new TextEncoder().encode(canonical)
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  const arr = new Uint8Array(digest)
+  let hex = ''
+  for (const b of arr) hex += b.toString(16).padStart(2, '0')
+  return hex
+}
+
 function buildChallengeBindingPayload(
   challengeId: string,
   siteKey: string,
   expiresAt: number,
+  eventsDigest: string,
 ): string {
-  return `${challengeId}:${siteKey}:${expiresAt}`
+  return `${challengeId}:${siteKey}:${expiresAt}:${eventsDigest}`
+}
+
+async function signWithEvents(
+  challenge: { id: string; site_key: string; expires_at: number },
+  events: Array<{ t: number; x: number; y: number; type: string }>,
+  privateKey: CryptoKey,
+): Promise<string> {
+  const digest = await computeEventsDigest(events)
+  return signChallengeId(
+    buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at, digest),
+    privateKey,
+  )
 }
 
 /**
@@ -177,7 +202,7 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at), keyPair.privateKey)
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     const result = await validateSubmission(config, {
       challenge_id: challenge.id,
@@ -224,7 +249,7 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at), keyPair.privateKey)
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     const req = {
       challenge_id: challenge.id,
@@ -305,7 +330,7 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at), keyPair.privateKey)
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     const result = await validateSubmission(config, {
       challenge_id: challenge.id,
@@ -412,10 +437,7 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(
-      buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at),
-      keyPair.privateKey,
-    )
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     const result = await validateSubmission(config, {
       challenge_id: challenge.id,
@@ -496,10 +518,7 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(
-      buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at),
-      keyPair.privateKey,
-    )
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     const result = await validateSubmission(providerConfig, {
       challenge_id: challenge.id,
@@ -522,7 +541,47 @@ describe('validate pipeline', () => {
     expect(result.success).toBe(true)
   })
 
-  it('SecretFeaturesProvider that throws falls back gracefully', async () => {
+  it('SecretFeaturesProvider infra error falls back to built-in scoring', async () => {
+    const provider: SecretFeaturesProvider = {
+      score() {
+        throw new TypeError('Cannot read properties of undefined')
+      },
+    }
+
+    const providerConfig: ServerConfig = {
+      ...config,
+      secretFeaturesProvider: provider,
+    }
+
+    const challenge = await createChallenge(providerConfig, { site_key: 'test-site' })
+    const maze = generateMaze({
+      width: challenge.maze_width,
+      height: challenge.maze_height,
+      difficulty: challenge.maze_difficulty,
+      seed: challenge.maze_seed,
+    })
+    const events = makeHumanEvents(maze)
+    const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
+    const keyPair = await generateTestKeyPair()
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
+
+    const result = await validateSubmission(providerConfig, {
+      challenge_id: challenge.id,
+      site_key: 'test-site',
+      session_id: 'session-infra-fallback',
+      maze_seed: challenge.maze_seed,
+      events,
+      pow_proof: powProof,
+      public_key: keyPair.publicKeyBase64,
+      signature,
+      timestamp: Date.now(),
+    })
+
+    // Infra error (TypeError) → falls back to built-in scoring, human passes
+    expect(result.success).toBe(true)
+  })
+
+  it('SecretFeaturesProvider unknown error applies severe score penalty', async () => {
     const provider: SecretFeaturesProvider = {
       score() {
         throw new Error('provider exploded')
@@ -544,15 +603,12 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(
-      buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at),
-      keyPair.privateKey,
-    )
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     const result = await validateSubmission(providerConfig, {
       challenge_id: challenge.id,
       site_key: 'test-site',
-      session_id: 'session-fallback',
+      session_id: 'session-unknown-error',
       maze_seed: challenge.maze_seed,
       events,
       pow_proof: powProof,
@@ -561,7 +617,47 @@ describe('validate pipeline', () => {
       timestamp: Date.now(),
     })
 
-    // Should not crash, falls back to built-in scoring
+    // Unknown error → score * 0.1 penalty → fails threshold
+    expect(result.success).toBe(false)
+  })
+
+  it('SecretFeaturesProvider timeout error falls back gracefully', async () => {
+    const provider: SecretFeaturesProvider = {
+      score() {
+        throw new Error('Request timeout after 5000ms')
+      },
+    }
+
+    const providerConfig: ServerConfig = {
+      ...config,
+      secretFeaturesProvider: provider,
+    }
+
+    const challenge = await createChallenge(providerConfig, { site_key: 'test-site' })
+    const maze = generateMaze({
+      width: challenge.maze_width,
+      height: challenge.maze_height,
+      difficulty: challenge.maze_difficulty,
+      seed: challenge.maze_seed,
+    })
+    const events = makeHumanEvents(maze)
+    const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
+    const keyPair = await generateTestKeyPair()
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
+
+    const result = await validateSubmission(providerConfig, {
+      challenge_id: challenge.id,
+      site_key: 'test-site',
+      session_id: 'session-timeout-fallback',
+      maze_seed: challenge.maze_seed,
+      events,
+      pow_proof: powProof,
+      public_key: keyPair.publicKeyBase64,
+      signature,
+      timestamp: Date.now(),
+    })
+
+    // Timeout is infra error → falls back to built-in scoring, human passes
     expect(result.success).toBe(true)
   })
 
@@ -585,10 +681,7 @@ describe('validate pipeline', () => {
     const events = makeHumanEvents(maze)
     const powProof = await solvePoW(challenge.pow_challenge, challenge.pow_difficulty)
     const keyPair = await generateTestKeyPair()
-    const signature = await signChallengeId(
-      buildChallengeBindingPayload(challenge.id, challenge.site_key, challenge.expires_at),
-      keyPair.privateKey,
-    )
+    const signature = await signWithEvents(challenge, events, keyPair.privateKey)
 
     await validateSubmission(observableConfig, {
       challenge_id: challenge.id,

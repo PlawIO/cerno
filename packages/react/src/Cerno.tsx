@@ -11,7 +11,7 @@ import type {
 import { extractFeatures, generateMaze, RENDERING } from '@cernosh/core'
 import { MazeCanvas } from './MazeCanvas.js'
 import { StroopOverlay } from './StroopOverlay.js'
-import { generateEphemeralKeyPair, signChallenge } from './crypto-binding.js'
+import { generateEphemeralKeyPair, signChallenge, computeEventsDigest } from './crypto-binding.js'
 import { isWebAuthnAvailable, requestWebAuthnAuthentication } from './webauthn.js'
 
 // ── PoW helpers ──
@@ -269,8 +269,8 @@ type ChallengeWithRequirements = Challenge & {
   }
 }
 
-function buildChallengeBindingPayload(challenge: Challenge): string {
-  return `${challenge.id}:${challenge.site_key}:${challenge.expires_at}`
+function buildChallengeBindingPayload(challenge: Challenge, eventsDigest: string): string {
+  return `${challenge.id}:${challenge.site_key}:${challenge.expires_at}:${eventsDigest}`
 }
 
 function extractLatestPointerAttempt(events: RawEvent[]): RawEvent[] {
@@ -412,14 +412,19 @@ export function Cerno({
       probeResponsesRef.current = []
       completedProbeIdsRef.current = new Set()
 
-      // Generate maze from seed (dimensions and difficulty come from server challenge)
-      const m = generateMaze({
-        width: ch.maze_width,
-        height: ch.maze_height,
-        difficulty: ch.maze_difficulty,
-        seed: ch.maze_seed,
-      })
-      setMaze(m)
+      // Image mode: maze rendered server-side as PNG, no seed on client
+      if (ch.maze_image) {
+        setMaze(null)
+      } else {
+        // Grid mode: generate maze from seed (dimensions and difficulty come from server challenge)
+        const m = generateMaze({
+          width: ch.maze_width,
+          height: ch.maze_height,
+          difficulty: ch.maze_difficulty,
+          seed: ch.maze_seed,
+        })
+        setMaze(m)
+      }
 
       // Start PoW in background
       powRef.current = startPow(ch.pow_challenge, ch.pow_difficulty)
@@ -473,7 +478,7 @@ export function Cerno({
   // Submit the validation request (after maze + optional probes)
   const submitValidation = useCallback(
     async (events: RawEvent[]) => {
-      if (!challenge || !maze) return
+      if (!challenge || (!maze && !challenge.maze_image)) return
       setState('submitting')
 
       try {
@@ -482,7 +487,8 @@ export function Cerno({
 
         const keyPair = keyPairRef.current
         if (!keyPair) throw new Error('Keypair not ready')
-        const signature = await signChallenge(buildChallengeBindingPayload(challenge), keyPair.privateKey)
+        const eventsDigest = await computeEventsDigest(events)
+        const signature = await signChallenge(buildChallengeBindingPayload(challenge, eventsDigest), keyPair.privateKey)
         const webauthn =
           challenge.webauthn_request_options
             ? await requestWebAuthnAuthentication(challenge.webauthn_request_options)
@@ -573,7 +579,7 @@ export function Cerno({
         onError?.(error)
       }
     },
-    [challenge, maze, siteKey, sessionId, stableId, apiUrl, size, attempts, clearExpiry, onVerify, onError, fetchChallenge],
+    [challenge, siteKey, sessionId, stableId, apiUrl, size, attempts, clearExpiry, onVerify, onError, fetchChallenge],
   )
 
   // Handle probe completion
@@ -610,6 +616,52 @@ export function Cerno({
       setState('ready')
     },
     [apiUrl, challenge, fetchChallenge, sessionId],
+  )
+
+  // Image mode: position-based probe triggering (distance check against trigger_position)
+  const PROBE_TRIGGER_THRESHOLD = 0.06 // 6% of canvas
+  const handlePositionVisit = useCallback(
+    async (position: { x: number; y: number }, events: RawEvent[]) => {
+      if (!challenge || state === 'probe' || state === 'submitting') return
+      const nextProbe = challenge.probes?.find((probe) => {
+        if (completedProbeIdsRef.current.has(probe.id)) return false
+        if (armingProbeIdRef.current === probe.id) return false
+        if (!probe.trigger_position) return false
+        const dx = position.x - probe.trigger_position.x
+        const dy = position.y - probe.trigger_position.y
+        return Math.sqrt(dx * dx + dy * dy) < PROBE_TRIGGER_THRESHOLD
+      })
+      if (!nextProbe) return
+
+      armingProbeIdRef.current = nextProbe.id
+      setState('probe')
+
+      const res = await fetch(`${apiUrl}/probe/arm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challenge_id: challenge.id,
+          site_key: siteKey,
+          session_id: sessionId,
+          probe_id: nextProbe.id,
+          events,
+        }),
+      })
+      const result = await res.json() as { success?: boolean; probe_ticket?: string; error?: string }
+      if (!mountedRef.current) return
+
+      if (!result.success || !result.probe_ticket) {
+        armingProbeIdRef.current = null
+        setState('failed')
+        setErrorMsg(friendlyError('probe_failed', result.error))
+        fetchChallenge()
+        return
+      }
+
+      activeProbeTicketRef.current = result.probe_ticket
+      setActiveProbe(nextProbe)
+    },
+    [apiUrl, challenge, fetchChallenge, sessionId, siteKey, state],
   )
 
   const handleCellVisit = useCallback(
@@ -657,11 +709,11 @@ export function Cerno({
 
   const handlePathComplete = useCallback(
     async (events: RawEvent[]) => {
-      if (!challenge || !maze) return
+      if (!challenge) return
       const canonicalEvents = extractLatestPointerAttempt(events)
       submitValidation(canonicalEvents)
     },
-    [challenge, maze, submitValidation],
+    [challenge, submitValidation],
   )
 
   // ── Styles ──
@@ -758,7 +810,7 @@ export function Cerno({
   if (state === 'submitting') {
     return (
       <div style={containerStyle} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
-        {maze && <MazeCanvas maze={maze} theme={theme} onPathComplete={() => {}} paused size={size} />}
+        {(maze || challenge?.maze_image) && <MazeCanvas maze={maze ?? undefined} theme={theme} onPathComplete={() => {}} paused size={size} mazeImage={challenge?.maze_image} mazeImageWidth={challenge?.maze_image_width} mazeImageHeight={challenge?.maze_image_height} startPosition={challenge?.start_position} exitPosition={challenge?.exit_position} />}
         <div style={statusStyle}>
           <Spinner />
           Verifying...
@@ -794,28 +846,36 @@ export function Cerno({
   // Probe overlays on top of the SAME MazeCanvas (paused) so the mouse collector
   // stays alive. This is critical for K-H1: motor events must continue during probes.
   const cellSz = size === 'compact' ? 28 : RENDERING.CELL_SIZE
+  const isImageMode = !!challenge?.maze_image
   return (
     <div style={{ ...containerStyle, position: 'relative' }} data-cerno-theme={theme} role="group" aria-label="Cerno verification">
-      {maze && (
+      {(maze || isImageMode) && (
         <MazeCanvas
-          maze={maze}
+          maze={maze ?? undefined}
           theme={theme}
           onPathComplete={handlePathComplete}
           onCellVisit={handleCellVisit}
+          onPositionVisit={handlePositionVisit}
           paused={state === 'probe'}
           size={size}
           onCollectorStartTime={(getter) => { collectorStartTimeGetterRef.current = getter }}
+          mazeImage={challenge?.maze_image}
+          mazeImageWidth={challenge?.maze_image_width}
+          mazeImageHeight={challenge?.maze_image_height}
+          startPosition={challenge?.start_position}
+          exitPosition={challenge?.exit_position}
         />
       )}
-      {state === 'probe' && activeProbe && maze && (
+      {state === 'probe' && activeProbe && (maze || isImageMode) && (
         <StroopOverlay
           probe={activeProbe}
-          mazeWidth={maze.width}
-          mazeHeight={maze.height}
+          mazeWidth={maze?.width ?? (challenge?.maze_image_width ? Math.round(challenge.maze_image_width / cellSz) : 8)}
+          mazeHeight={maze?.height ?? (challenge?.maze_image_height ? Math.round(challenge.maze_image_height / cellSz) : 8)}
           cellSize={cellSz}
           theme={theme}
           onComplete={handleProbeComplete}
           collectorStartTime={collectorStartTimeGetterRef.current?.()}
+          imageMode={isImageMode}
         />
       )}
       {expiryWarning && (state === 'ready' || state === 'solving') && (

@@ -46,6 +46,21 @@ function toCanvasEvents(
   })
 }
 
+// Helper: read the full (unsanitized) probe from the store.
+// createChallenge strips isTarget/target_color from the client response,
+// so tests that need the target cell must read from the store.
+async function getStoredTargetCell(store: MemoryStore, challengeId: string, probeId: string) {
+  const full = await store.getChallenge(challengeId)
+  const probe = full!.probes!.find(p => p.id === probeId)!
+  return probe.cells.find(c => c.isTarget)!
+}
+
+async function getStoredNonTargetCell(store: MemoryStore, challengeId: string, probeId: string) {
+  const full = await store.getChallenge(challengeId)
+  const probe = full!.probes!.find(p => p.id === probeId)!
+  return probe.cells.find(c => !c.isTarget)!
+}
+
 describe('probe flow', () => {
   it('arms, completes, and verifies a probe token once', async () => {
     const store = new MemoryStore()
@@ -81,7 +96,7 @@ describe('probe flow', () => {
     expect(armed.success).toBe(true)
     expect(armed.probe_ticket).toBeDefined()
 
-    const targetCell = probe.cells.find((cell) => cell.isTarget)!
+    const targetCell = await getStoredTargetCell(store, challenge.id, probe.id)
     await new Promise((resolve) => setTimeout(resolve, 180))
     const completed = await completeProbe(config, {
       challenge_id: challenge.id,
@@ -188,10 +203,11 @@ describe('probe flow', () => {
     })
     expect(shortArmed.success).toBe(true)
 
+    // Read target cell before the TTL expires
+    const targetCell = await getStoredTargetCell(store, shortChallenge.id, shortProbe.id)
+
     // Wait for the deadline to pass (deadline_at = min(expires_at, armed_at + 5s) = ~1s)
     await new Promise((resolve) => setTimeout(resolve, 1_200))
-
-    const targetCell = shortProbe.cells.find((cell) => cell.isTarget)!
     const completed = await completeProbe(shortConfig, {
       challenge_id: shortChallenge.id,
       session_id: 'sess-deadline2',
@@ -234,8 +250,8 @@ describe('probe flow', () => {
     })
     expect(armed.success).toBe(true)
 
-    // Find a non-target cell
-    const nonTarget = probe.cells.find((cell) => !cell.isTarget)!
+    // Find a non-target cell from the stored (unsanitized) challenge
+    const nonTarget = await getStoredNonTargetCell(store, challenge.id, probe.id)
     await new Promise((resolve) => setTimeout(resolve, 180))
     const completed = await completeProbe(config, {
       challenge_id: challenge.id,
@@ -280,7 +296,7 @@ describe('probe flow', () => {
     expect(armed.success).toBe(true)
 
     // Complete immediately -- reaction time will be < 150ms
-    const targetCell = probe.cells.find((cell) => cell.isTarget)!
+    const targetCell = await getStoredTargetCell(store, challenge.id, probe.id)
     const completed = await completeProbe(config, {
       challenge_id: challenge.id,
       session_id: 'sess-fast',
@@ -369,7 +385,7 @@ describe('probe flow', () => {
     })
     expect(armed.success).toBe(true)
 
-    const targetCell = probe.cells.find((cell) => cell.isTarget)!
+    const targetCell = await getStoredTargetCell(store, challenge.id, probe.id)
     await new Promise((resolve) => setTimeout(resolve, 180))
     const completed = await completeProbe(config, {
       challenge_id: challenge.id,

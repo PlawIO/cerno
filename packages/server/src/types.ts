@@ -108,6 +108,11 @@ export interface CaptchaStore {
   /** Store a behavioral fingerprint for cross-session reputation */
   setReputation?(key: string, data: ReputationData, ttlMs: number): Promise<void>
   getReputation?(key: string): Promise<ReputationData | null>
+
+  // ── Adaptive baselines (Phase B) ──
+  /** Store a Welford running statistics entry */
+  setAdaptiveState?(key: string, state: AdaptiveState): Promise<void>
+  getAdaptiveState?(key: string): Promise<AdaptiveState | null>
 }
 
 export interface SigningKey {
@@ -178,6 +183,18 @@ export interface ReputationData {
   /** Behavioral fingerprint: mean feature values across sessions */
   feature_means: Partial<BehavioralFeatures>
   last_seen: number
+}
+
+/** Welford online statistics for adaptive baselines (Phase B).
+ *  Collects mean/variance from high-confidence human samples. */
+export interface AdaptiveState {
+  feature_key: string
+  input_type: string
+  count: number
+  mean: number
+  /** Welford sum of squared differences from the mean (M2) */
+  m2: number
+  last_updated: number
 }
 
 export interface ServerConfig {
@@ -258,6 +275,8 @@ export interface ServerConfig {
   scoringVersions?: Record<string, ScoringConfig>
   /** Pluggable secret features provider (managed service extensibility). */
   secretFeaturesProvider?: SecretFeaturesProvider
+  /** Maze rendering mode: 'image' enables corridor-based path validation for free-draw. */
+  mazeRenderMode?: 'grid' | 'image'
 }
 
 export interface ProbeArmSessionData {
@@ -268,6 +287,10 @@ export interface ProbeArmSessionData {
   session_id: string
   armed_at: number
   deadline_at: number
+  /** Last event timestamp from the arm request trace (collector-relative).
+   *  Used as server-derived probe anchor for K-H1 motor continuity,
+   *  replacing the client-reported probe_shown_at. */
+  last_event_t: number
 }
 
 export interface WebAuthnCredentialRecord {

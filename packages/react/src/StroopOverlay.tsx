@@ -38,12 +38,20 @@ function injectProbeStyles() {
   probeStylesInjected = true
 }
 
-/** Shape overlays for accessibility (K-H1/D7: color should not be the sole differentiator) */
-const SHAPES = ['circle', 'square', 'triangle'] as const
-type ShapeType = typeof SHAPES[number]
+/** Deterministic shape-color pairing for accessibility.
+ *  Each color always maps to the same shape, so colorblind users
+ *  can identify buttons by shape. Sighted users use color (faster). */
+const SHAPE_BY_COLOR: Record<string, string> = {
+  red: 'square', blue: 'circle', green: 'triangle',
+  yellow: 'diamond', purple: 'star', pink: 'hexagon',
+  orange: 'hexagon', cyan: 'circle',
+}
 
-function shapeForIndex(i: number): ShapeType {
-  return SHAPES[i % SHAPES.length]
+type ShapeType = 'circle' | 'square' | 'triangle' | 'diamond' | 'star' | 'hexagon'
+
+function shapeForColor(hex: string): ShapeType {
+  const name = colorName(hex)
+  return (SHAPE_BY_COLOR[name] as ShapeType) ?? 'circle'
 }
 
 export interface StroopOverlayProps {
@@ -55,6 +63,8 @@ export interface StroopOverlayProps {
   onComplete: (response: ProbeResponse) => void
   /** Mouse collector start time (performance.now() base) for K-H1 probe_shown_at */
   collectorStartTime?: number
+  /** Image mode: PNG maze has margins baked in, skip adding them to overlay dimensions */
+  imageMode?: boolean
 }
 
 export function StroopOverlay({
@@ -65,6 +75,7 @@ export function StroopOverlay({
   theme,
   onComplete,
   collectorStartTime,
+  imageMode = false,
 }: StroopOverlayProps) {
   injectProbeStyles()
 
@@ -78,14 +89,14 @@ export function StroopOverlay({
   const margin = RENDERING.MARGIN
   const mazePixelW = mazeWidth * cellSize
   const mazePixelH = mazeHeight * cellSize
-  const overlayW = mazePixelW + margin * 2
-  const overlayH = mazePixelH + margin * 2 + 24
+  const overlayW = imageMode ? mazePixelW : mazePixelW + margin * 2
+  const overlayH = imageMode ? mazePixelH + 24 : mazePixelH + margin * 2 + 24
 
   // E5: minimum 44px touch target
   const buttonSize = Math.max(cellSize * 1.5, 44)
 
   const handleCellTap = useCallback(
-    (cell: { x: number; y: number; isTarget: boolean }) => {
+    (cell: { x: number; y: number; color: string }) => {
       if (completedRef.current) return
       completedRef.current = true
 
@@ -95,7 +106,6 @@ export function StroopOverlay({
         probe_id: probe.id,
         tapped_cell: { x: cell.x, y: cell.y },
         reaction_time_ms: Math.round(reactionTime),
-        correct: cell.isTarget,
         probe_shown_at: probeShownAt != null ? Math.round(probeShownAt) : undefined,
       })
     },
@@ -133,6 +143,7 @@ export function StroopOverlay({
         background: theme === 'dark' ? 'rgba(12, 10, 9, 0.9)' : 'rgba(250, 250, 249, 0.9)',
         borderRadius: 'var(--cerno-radius)',
         zIndex: 10,
+        pointerEvents: 'none',
       }}
     >
       {/* E3: countdown bar */}
@@ -161,8 +172,13 @@ export function StroopOverlay({
           color: 'var(--cerno-fg)',
           fontFamily: 'var(--cerno-font)',
         }}
+        aria-label="Quick color verification"
       >
-        {probe.instruction}
+        {probe.instruction_svg ? (
+          <span dangerouslySetInnerHTML={{ __html: probe.instruction_svg }} />
+        ) : (
+          probe.instruction
+        )}
       </div>
 
       <div
@@ -172,8 +188,8 @@ export function StroopOverlay({
           gap: 12,
         }}
       >
-        {probe.cells.map((cell, i) => {
-          const shape = shapeForIndex(i)
+        {probe.cells.map((cell) => {
+          const shape = shapeForColor(cell.color)
           return (
             <button
               key={`${cell.x}-${cell.y}`}
@@ -191,6 +207,7 @@ export function StroopOverlay({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                pointerEvents: 'auto',
               }}
               onMouseDown={(e) => {
                 (e.target as HTMLElement).style.transform = 'scale(0.95)'
@@ -199,10 +216,13 @@ export function StroopOverlay({
                 (e.target as HTMLElement).style.transform = 'scale(1)'
               }}
             >
-              <svg width={buttonSize * 0.4} height={buttonSize * 0.4} viewBox="0 0 20 20" style={{ opacity: 0.3, pointerEvents: 'none' }}>
+              <svg width={buttonSize * 0.4} height={buttonSize * 0.4} viewBox="0 0 20 20" style={{ opacity: 0.7, pointerEvents: 'none' }}>
                 {shape === 'circle' && <circle cx="10" cy="10" r="8" fill="white" />}
                 {shape === 'square' && <rect x="2" y="2" width="16" height="16" fill="white" />}
                 {shape === 'triangle' && <polygon points="10,2 18,18 2,18" fill="white" />}
+                {shape === 'diamond' && <polygon points="10,1 19,10 10,19 1,10" fill="white" />}
+                {shape === 'star' && <polygon points="10,1 12.5,7.5 19,8 14,13 15.5,19 10,15.5 4.5,19 6,13 1,8 7.5,7.5" fill="white" />}
+                {shape === 'hexagon' && <polygon points="5,2 15,2 19,10 15,18 5,18 1,10" fill="white" />}
               </svg>
             </button>
           )

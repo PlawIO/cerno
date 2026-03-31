@@ -9,6 +9,15 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "^5.0.0"
+    "@astrojs/react": "^5.0.0",
+    "@cernosh/core": "^0.3.0",
+    "@cernosh/react": "^0.3.1",
+    "astro": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 }

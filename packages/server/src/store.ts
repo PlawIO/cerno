@@ -1,5 +1,6 @@
 import type { Challenge } from '@cernosh/core'
 import type {
+  AdaptiveState,
   CaptchaStore,
   ProbeArmSessionData,
   ReputationData,
@@ -31,6 +32,7 @@ export class MemoryStore implements CaptchaStore {
   private probeArmSessions = new Map<string, TimedEntry<ProbeArmSessionData>>()
   private webAuthnRegistrationSessions = new Map<string, TimedEntry<WebAuthnRegistrationSessionData>>()
   private webAuthnCredentials = new Map<string, WebAuthnCredentialRecord>()
+  private adaptiveStates = new Map<string, AdaptiveState>()
   private timers = new Map<string, ReturnType<typeof setTimeout>>()
 
   async setChallenge(id: string, data: Challenge, ttlMs: number): Promise<void> {
@@ -206,6 +208,16 @@ export class MemoryStore implements CaptchaStore {
     return entry.value
   }
 
+  // ── Adaptive baselines store (Phase B) ──
+
+  async setAdaptiveState(key: string, state: AdaptiveState): Promise<void> {
+    this.adaptiveStates.set(key, state)
+  }
+
+  async getAdaptiveState(key: string): Promise<AdaptiveState | null> {
+    return this.adaptiveStates.get(key) ?? null
+  }
+
   /** Remove all entries and cancel timers. Useful for test teardown. */
   clear(): void {
     for (const timer of this.timers.values()) {
@@ -219,6 +231,7 @@ export class MemoryStore implements CaptchaStore {
     this.probeArmSessions.clear()
     this.webAuthnRegistrationSessions.clear()
     this.webAuthnCredentials.clear()
+    this.adaptiveStates.clear()
   }
 
   private scheduleCleanup(timerKey: string, delayMs: number, fn: () => void): void {

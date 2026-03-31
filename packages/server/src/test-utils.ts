@@ -104,7 +104,50 @@ function cellToNorm(cell: Point, maze: Maze): { x: number; y: number } {
   }
 }
 
+// ── Chrome 60Hz timing model ──
+//
+// Chrome fires pointermove at display vsync (~16.67ms). OS scheduling adds
+// Gaussian jitter (sigma ~0.8ms). Occasionally a frame is skipped (~3%),
+// producing a ~33ms gap. During pauses, the mouse nearly stops but micro-tremor
+// keeps generating events at the same vsync rate with tiny spatial offsets.
+//
+// This model produces:
+//   raw_timing_entropy ~1.5-3.0  (most mass in 2-3 bins at 1ms resolution)
+//   timing_kurtosis    ~30-200   (peaked distribution with rare frame-skip tails)
+//   timing_cv          ~0.03-0.08 per-segment, ~0.3-0.7 with pause slow-downs
+
+const VSYNC_MS = 16.67
+const VSYNC_JITTER_STD = 0.8
+const FRAME_SKIP_PROB = 0.03
+
+function chromeInterval(rand: () => number): number {
+  let dt = normalRandom(rand, VSYNC_MS, VSYNC_JITTER_STD)
+  if (rand() < FRAME_SKIP_PROB) dt += VSYNC_MS
+  return Math.max(4, dt)
+}
+
 // ── Synthetic Human Trace ──
+//
+// Models a human solving a maze in Chrome at 60Hz. Key design choices:
+//
+// 1. TIMING: All events at constant vsync rate (16.67ms + Gaussian jitter,
+//    sigma 0.8ms). Chrome fires pointermove at display refresh regardless
+//    of mouse speed. Occasional frame skips (~3%) produce ~33ms gaps.
+//    This yields RTE ~2.0, timing_kurtosis ~30-200.
+//
+// 2. SPATIAL: Linear interpolation between cell centers with variable
+//    speed via frames-per-cell count (global envelope: slow at start/end,
+//    fast in middle). Constant velocity within cells avoids pathological
+//    near-zero-velocity points that inflate Menger curvature.
+//
+// 3. NOISE: Ornstein-Uhlenbeck position perturbation (slow RESTORE=0.03,
+//    scale 0.003 * cellW). High temporal correlation preserves velocity
+//    autocorrelation (VKA ~0.88). Small amplitude keeps curvature_mean
+//    in the production range (~3-20).
+//
+// 4. PAUSES: Time gaps at junctions (no events emitted). Chrome fires no
+//    pointermove when the mouse is stationary. The 60Hz resampler
+//    interpolates through the gap, producing low curvature.
 
 export function generateSyntheticHumanTrace(maze: Maze, options?: HumanTraceOptions): RawEvent[] {
   const speedMul = options?.speedMultiplier ?? 1.0
@@ -120,93 +163,91 @@ export function generateSyntheticHumanTrace(maze: Maze, options?: HumanTraceOpti
   const cellW = 1 / maze.width
   const cellH = 1 / maze.height
 
+  // ── Onset period ──
+  // User sees the maze, takes time to plan. Mouse is stationary during
+  // this period so Chrome fires no pointermove. The delay appears as
+  // movement_onset_ms in feature extraction.
   const onsetMean = (onsetMin + onsetMax) / 2
   const onsetStd = (onsetMax - onsetMin) / 4
   let onsetMs = normalRandom(rand, onsetMean, onsetStd)
   onsetMs = Math.max(onsetMin, Math.min(onsetMax, onsetMs))
 
-  let t = 0
-
   const startNorm = cellToNorm(path[0], maze)
-  const microX = (rand() - 0.5) * 0.02 * cellW
-  const microY = (rand() - 0.5) * 0.02 * cellH
 
+  // Onset: mouse-down after planning delay. During onset the mouse is
+  // stationary (user is looking at the maze), so no pointermove fires.
+  // The onset shows up as movement_onset_ms in feature extraction.
+  let t = onsetMs
   events.push({
     t,
-    x: Math.max(0, Math.min(1, startNorm.x + microX)),
-    y: Math.max(0, Math.min(1, startNorm.y + microY)),
+    x: Math.max(0, Math.min(1, startNorm.x + (rand() - 0.5) * 0.01 * cellW)),
+    y: Math.max(0, Math.min(1, startNorm.y + (rand() - 0.5) * 0.01 * cellH)),
     type: 'down',
   })
 
-  const onsetEvents = Math.max(2, Math.floor(onsetMs / 80))
-  const onsetInterval = onsetMs / onsetEvents
-  for (let i = 0; i < onsetEvents; i++) {
-    const interval = logNormalRandom(rand, Math.log(Math.max(8, onsetInterval)), 0.3)
-    t += Math.max(8, interval)
-    events.push({
-      t,
-      x: Math.max(0, Math.min(1, startNorm.x + microX + (rand() - 0.5) * 0.003 * cellW)),
-      y: Math.max(0, Math.min(1, startNorm.y + microY + (rand() - 0.5) * 0.003 * cellH)),
-      type: 'move',
-    })
-  }
-
+  // ── Spatial noise state (Ornstein-Uhlenbeck) ──
+  // Small RESTORE (0.03) = high temporal correlation = smooth wobble.
+  // NOISE_SCALE controls curvature: larger scale = more lateral deviation = higher
+  // Menger curvature. Production mean is 57 (std 50). Scale of 0.003 produces
+  // curvature ~15-60 across maze sizes (6x6 through 10x10), keeping CM within
+  // 1 std of the production baseline.
   let noiseX = 0
   let noiseY = 0
-  const NOISE_DRIFT = 0.003
-  const NOISE_RESTORE = 0.15
+  const NOISE_SCALE = 0.003
+  const NOISE_RESTORE = 0.03
 
+  // ── Generate movement events ──
   for (let i = 1; i < path.length; i++) {
     const fromNorm = cellToNorm(path[i - 1], maze)
     const toNorm = cellToNorm(path[i], maze)
 
+    // ── Pause at junctions ──
+    // Modeled as a time gap: mouse is stationary, Chrome fires no pointermove.
+    // The 60Hz resampler interpolates through the gap with a straight line
+    // from the last pre-pause position to the first post-pause position,
+    // producing near-zero curvature (correct for stationary mouse).
     const isJunction = openPassages(maze, path[i]) > 2
     if (isJunction && rand() < pauseProb) {
-      const pauseMs = Math.max(100, Math.min(500, logNormalRandom(rand, Math.log(250), 0.4)))
-      const pauseSteps = Math.max(2, Math.floor(pauseMs / 16))
-      for (let p = 0; p < pauseSteps; p++) {
-        const interval = logNormalRandom(rand, Math.log(16), 0.3)
-        t += Math.max(8, interval)
-        events.push({
-          t,
-          x: Math.max(0, Math.min(1, fromNorm.x + (rand() - 0.5) * 0.005 * cellW)),
-          y: Math.max(0, Math.min(1, fromNorm.y + (rand() - 0.5) * 0.005 * cellH)),
-          type: 'move',
-        })
-      }
+      const pauseMs = Math.max(80, Math.min(400, logNormalRandom(rand, Math.log(180), 0.4)))
+      t += pauseMs
     }
+
+    // ── Cell-to-cell movement ──
+    // Linear interpolation with speed controlled by frames-per-cell count.
+    // Global envelope: slower at path start/end, faster in the middle.
+    const globalProgress = i / (path.length - 1)
+    let speedEnvelope: number
+    if (globalProgress < 0.25) {
+      speedEnvelope = 0.5 + 0.5 * (globalProgress / 0.25)
+    } else if (globalProgress < 0.6) {
+      speedEnvelope = 1.0
+    } else {
+      speedEnvelope = 0.5 + 0.5 * ((1.0 - globalProgress) / 0.4)
+    }
+    // Micro-variation in speed (simulates natural rhythm)
+    speedEnvelope *= 1.0 + 0.08 * Math.sin(globalProgress * Math.PI * 5 + rand() * 1.0)
+
+    // Frames per cell: more frames = slower through this cell
+    const baseFramesPerCell = 10
+    const framesPerCell = Math.max(6, Math.round(baseFramesPerCell / (speedEnvelope * speedMul)))
 
     const dx = toNorm.x - fromNorm.x
     const dy = toNorm.y - fromNorm.y
-    const numSteps = Math.max(8, Math.round(10 / speedMul))
-    const globalStart = (i - 1) / (path.length - 1)
-    const globalEnd = i / (path.length - 1)
 
-    for (let s = 1; s <= numSteps; s++) {
-      const localProgress = s / numSteps
-      const globalProgress = globalStart + (globalEnd - globalStart) * localProgress
+    for (let s = 1; s <= framesPerCell; s++) {
+      // Linear interpolation within cells. Humans maintain roughly constant
+      // velocity through corridor cells (no deceleration at each cell boundary).
+      // Global speed variation comes from the framesPerCell count.
+      const localProgress = s / framesPerCell
 
-      let envelope: number
-      if (globalProgress < 0.3) {
-        envelope = 0.4 + 0.6 * (globalProgress / 0.3)
-      } else if (globalProgress < 0.55) {
-        envelope = 1.0
-      } else {
-        envelope = 0.3 + 0.7 * ((1.0 - globalProgress) / 0.45)
-      }
-
-      const sinVariation = 1.0 + 0.1 * Math.sin(globalProgress * Math.PI * 6 + rand() * 0.5)
-      const speedFactor = envelope * sinVariation
-
-      noiseX = noiseX * (1 - NOISE_RESTORE) + (rand() - 0.5) * NOISE_DRIFT * cellW
-      noiseY = noiseY * (1 - NOISE_RESTORE) + (rand() - 0.5) * NOISE_DRIFT * cellH
+      // OU noise: each step is correlated with previous (RESTORE is small)
+      noiseX = noiseX * (1 - NOISE_RESTORE) + normalRandom(rand, 0, NOISE_SCALE * cellW)
+      noiseY = noiseY * (1 - NOISE_RESTORE) + normalRandom(rand, 0, NOISE_SCALE * cellH)
 
       const x = fromNorm.x + dx * localProgress + noiseX
       const y = fromNorm.y + dy * localProgress + noiseY
 
-      const baseInterval = 16 / Math.max(speedFactor, 0.2)
-      const interval = logNormalRandom(rand, Math.log(Math.max(8, baseInterval)), 0.35)
-      t += Math.max(6, interval)
+      t += chromeInterval(rand)
 
       events.push({
         t,
@@ -217,12 +258,13 @@ export function generateSyntheticHumanTrace(maze: Maze, options?: HumanTraceOpti
     }
   }
 
+  // ── Final release ──
   const exitNorm = cellToNorm(path[path.length - 1], maze)
-  t += logNormalRandom(rand, Math.log(30), 0.3)
+  t += chromeInterval(rand)
   events.push({
     t,
-    x: Math.max(0, Math.min(1, exitNorm.x + (rand() - 0.5) * 0.01 * cellW)),
-    y: Math.max(0, Math.min(1, exitNorm.y + (rand() - 0.5) * 0.01 * cellH)),
+    x: Math.max(0, Math.min(1, exitNorm.x + (rand() - 0.5) * 0.005 * cellW)),
+    y: Math.max(0, Math.min(1, exitNorm.y + (rand() - 0.5) * 0.005 * cellH)),
     type: 'up',
   })
 
