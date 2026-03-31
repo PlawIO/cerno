@@ -444,12 +444,14 @@ const enableReactGrab = import.meta.env.DEV
         border: none;
         cursor: pointer;
         color: var(--muted);
-        padding: 4px;
+        padding: 12px;
         border-radius: 2px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         transition: opacity 150ms ease;
+        min-width: 38px;
+        min-height: 38px;
       }
 
       .copy-btn:hover { opacity: 0.6; }
